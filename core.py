@@ -82,7 +82,6 @@ class Filters:
             inner_keys = sub_split[1].split("->")
             # [{name:content-type}, value]
             inner_keys[1] = inner_keys[1].split(".")
-            print(inner_keys[1])
             # [{name:content-type}, [value]]
             get_func = lambda entry, keys: get_inner(get_nested(entry, keys), inner_keys)
         else:
