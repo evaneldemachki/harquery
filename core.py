@@ -5,6 +5,18 @@ import pprint
 
 pdir = os.path.dirname(__file__)
 
+def query_switch(query):
+    if "!=" in query:
+        return lambda a,b: a != b, "!="
+    elif "=" in query:
+        return lambda a,b: a == b, "="
+    elif "!#" in query:
+        return lambda a,b: b not in a, "!#"
+    elif "#" in query:
+        return lambda a,b: b in a, "#"
+    else:
+        return None, None
+
 def get_nested(entry, keys):
     item = entry
     for key in keys:
@@ -51,22 +63,11 @@ class Filters:
         self._obj.pop(-1)
         print("removed filter: {0}".format(last_query))
 
-    def querySwitch(query):
-        if "!=" in query:
-            return lambda a,b: a != b, "!="
-        elif "=" in query:
-            return lambda a,b: a == b, "="
-        elif "!#" in query:
-            return lambda a,b: b not in a, "!#"
-        elif "#" in query:
-            return lambda a,b: b in a, "#"
-        else:
-            return None, None
     def _run(self, query):
         query = query.replace(" ","")
 
-        base_op, op_key = querySwitch(query)
-        if base_op is None || op_key is None:
+        base_op, op_key = query_switch(query)
+        if base_op is None or op_key is None:
             raise ValueError("invalid query: no match operators")
             
         op = lambda a,b: base_op(a,b) if a is not None else False
