@@ -9,7 +9,7 @@ def get_nested(entry, keys):
     item = entry
     for key in keys:
         item = item[key]
-    
+
     return item
 
 def get_inner(entry, keys):
@@ -22,18 +22,18 @@ def get_inner(entry, keys):
             if item[locator[0]] == locator[1]:
                 section = item
                 break
-    
+
     if section is None: # locator key/value pair not found
         return None
-    
+
     value = get_nested(section, keys[1])
     return value
-    
+
 class Filters:
     def __init__(self, profile, obj):
         self._profile = profile
         self._obj = obj
-        
+
         for query in self._obj:
             self._profile._obj, _ = self._run(query)
 
@@ -41,7 +41,7 @@ class Filters:
         self._profile._obj, query = self._run(query)
         self._obj.append(query)
         print("added filter: {0}".format(query))
-    
+
     def undo(self):
         self._profile._obj = deepcopy(self._profile._source)
         last_query = self._obj[-1]
@@ -51,24 +51,24 @@ class Filters:
         self._obj.pop(-1)
         print("removed filter: {0}".format(last_query))
 
+    def querySwitch(query):
+        if "!=" in query:
+            return lambda a,b: a != b, "!="
+        elif "=" in query:
+            return lambda a,b: a == b, "="
+        elif "!#" in query:
+            return lambda a,b: b not in a, "!#"
+        elif "#" in query:
+            return lambda a,b: b in a, "#"
+        else:
+            return None, None
     def _run(self, query):
         query = query.replace(" ","")
-        
-        if "!=" in query:
-            base_op = lambda a,b: a != b
-            op_key = "!="
-        elif "=" in query:
-            base_op = lambda a,b: a == b
-            op_key = "="
-        elif "!#" in query:
-            base_op = lambda a,b: b not in a
-            op_key = "!#"
-        elif "#" in query:
-            base_op = lambda a,b: b in a
-            op_key = "#"
-        else:
-            raise ValueError("invalid query: no match operators")
 
+        base_op, op_key = querySwitch(query)
+        if base_op is None || op_key is None:
+            raise ValueError("invalid query: no match operators")
+            
         op = lambda a,b: base_op(a,b) if a is not None else False
         # response.headers@{name:content-type}->value=application/json
         query_split = query.split(op_key)
@@ -105,17 +105,17 @@ class Filters:
         for entry in self._profile._obj:
             if op(get_func(entry, keys), value):
                 obj.append(entry)
-        
+
         return obj, query.replace(old_value, value)
-    
+
     def __repr__(self):
         repr_str = ""
         for i in range(len(self._obj)):
             query = self._obj[i]
             repr_str += "[{0}] {1}\n".format(i, query)
-        
+
         return repr_str
-    
+
     __str__ = __repr__
 
 class Profile:
@@ -124,7 +124,7 @@ class Profile:
         path = pdir + "/profile/{0}".format(name)
         if not os.path.exists(path):
             raise FileNotFoundError(path)
-        
+
         # assure that source HAR file exists
         source_path = path + "/source.har".format(name)
         if not os.path.exists(source_path):
@@ -132,17 +132,17 @@ class Profile:
         # load source as dict
         with open(source_path, "r", encoding="utf-8") as f:
             self._source = json.load(f)["log"]["entries"]
-        
+
         self._obj = deepcopy(self._source)
 
         # assure that filters JSON exists
         filters_path = path + "/filters.json"
         if not os.path.exists(filters_path):
-            raise FileNotFoundError(filters_path)        
+            raise FileNotFoundError(filters_path)
         # load profile as dict
         with open(filters_path, "r") as f:
             self.filters = Filters(self, json.load(f))
-    
+
     # export current proxy to JSON file
     def export(self):
         pass
@@ -186,11 +186,11 @@ class Profile:
     def set_view(self, query):
         self._view = query
         print("set view to '{0}'".format(query))
-     
+
     @property
     def name(self) -> str:
         return self._name
-    
+
     @name.setter # rename profile directory name on name change
     def name(self, value):
         current_name = self.name
@@ -199,18 +199,17 @@ class Profile:
         os.rename(pdir + "/profile/{0}".format(self.name), new_path)
         self._path = new_path
         self._name = value
-        
+
         print("renamed profile: {0} -> {1}".format(current_name, value))
-    
+
     def save(self):
         path = pdir + "/profile/{0}/filters.json".format(self.name)
         with open(path, "w") as f:
             json.dump(self.filters._obj, f)
-        
+
         print("saved profile filters")
 
     def __repr__(self):
         return "Profile: {0}".format(self.name)
 
     __str__ = __repr__
-            
