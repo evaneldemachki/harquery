@@ -1,9 +1,34 @@
 import os
 import json
 from copy import deepcopy
+import pprint
 
 pdir = os.path.dirname(__file__)
 
+def get_nested(entry, keys):
+    item = entry
+    for key in keys:
+        item = item[key]
+    
+    return item
+
+def get_inner(entry, keys):
+    # keys = [{name:content-type}, [value]]
+    locator = keys[0][1:-1].split(":")
+    # locator = [name, content-type]
+    section = None
+    for item in entry:
+        if locator[0] in item:
+            if item[locator[0]] == locator[1]:
+                section = item
+                break
+    
+    if section is None: # locator key/value pair not found
+        return None
+    
+    value = get_nested(section, keys[1])
+    return value
+    
 class Filters:
     def __init__(self, profile, obj):
         self._profile = profile
@@ -16,7 +41,6 @@ class Filters:
         self._profile._obj, query = self._run(query)
         self._obj.append(query)
         print("added filter: {0}".format(query))
-        self._profile._display()
     
     def undo(self):
         self._profile._obj = deepcopy(self._profile._source)
@@ -28,48 +52,59 @@ class Filters:
         print("removed filter: {0}".format(last_query))
 
     def _run(self, query):
-        if "!=" in query:
-            op = lambda a,b: a != b
-            op_key = "!="
-        elif "=" in query:
-            op = lambda a,b: a == b
-            op_key = "="
-        elif "!#" in query:
-            op = lambda a,b: b not in a
-            op_key = "!#"
-        elif "#" in query:
-            op = lambda a,b: b in a
-            op_key = "#"
-        else:
-            raise ValueError("invalid query")
-
         query = query.replace(" ","")
         
-        def get_item(entry):
-            item = entry
-            for key in keys:
-                item = item[key]
-            
-            return item
-        
+        if "!=" in query:
+            base_op = lambda a,b: a != b
+            op_key = "!="
+        elif "=" in query:
+            base_op = lambda a,b: a == b
+            op_key = "="
+        elif "!#" in query:
+            base_op = lambda a,b: b not in a
+            op_key = "!#"
+        elif "#" in query:
+            base_op = lambda a,b: b in a
+            op_key = "#"
+        else:
+            raise ValueError("invalid query: no match operators")
+
+        op = lambda a,b: base_op(a,b) if a is not None else False
+        # response.headers@{name:content-type}->value=application/json
         query_split = query.split(op_key)
-        assert len(query_split) == 2, "invalid query"
-        keys = query_split[0].split(".")
+        # [response.headers@{name:content-type}->value, application/json]
+        assert len(query_split) == 2, "invalid query: duplicate match operators"
+        if "@" in query_split[0]:
+            sub_split = query_split[0].split("@")
+            # [response.headers, {name:content-type}->value]
+            keys = sub_split[0].split(".")
+            # [response, headers]
+            inner_keys = sub_split[1].split("->")
+            # [{name:content-type}, value]
+            inner_keys[1] = inner_keys[1].split(".")
+            print(inner_keys[1])
+            # [{name:content-type}, [value]]
+            get_func = lambda entry, keys: get_inner(get_nested(entry, keys), inner_keys)
+        else:
+            keys = query_split[0].split(".")
+            get_func = get_nested
+
         value = query_split[1]
-        old_value = value
-        # check for index notation
+        old_value = value # save for return query replacement
+
+        # check for reference notation (inserts value from corresponding entry)
         if value[0]=="[" and value[-1]=="]":
             try:
                 index = int(value[1:-1])
             except:
                 raise ValueError("invalid index notation")
 
-            value = get_item(self._profile._obj[index])
-        
+            value = get_func(self._profile._obj[index], keys)
+
         obj = []
-        for x in self._profile._obj:
-            if op(get_item(x), value):
-                obj.append(x)
+        for entry in self._profile._obj:
+            if op(get_func(entry, keys), value):
+                obj.append(entry)
         
         return obj, query.replace(old_value, value)
     
@@ -115,29 +150,38 @@ class Profile:
     def branch(self, name):
         pass
 
-    #TODO: 1. add filter by dictionaries key/value pairs in list (headers@["content-type"]=application/json)
-    #      2. add filter by domain name (ie. term before .com/.net etc.)
+    # TODO: add filter by domain name (ie. term before .com/.net etc.)
 
 
     def reset_view(self):
         self._view = None
 
-    def _display(self):
-        def get_item(entry):
-            item = entry
-            for key in keys:
-                item = item[key]
-            
-            return item
+    def show(self):
+        if self._view is None:
+            pprint.pprint(self._obj)
+            return
 
-        keys = self._view.split(".")
-        count = 0
-        for i in range(len(self._obj)):
-            entry = self._obj[i]
-            print("[{0}] {1}".format(i, get_item(entry)))
-            count += 1
-        
-        print("Total entries: {0}".format(count))
+        if "@" in self._view:
+            view_split = self._view.split("@")
+            inner_keys = view_split[1].split("->")
+            inner_keys[1] = inner_keys[1].split(".")
+            keys = view_split[0].split(".")
+            count = 0
+            for i in range(len(self._obj)):
+                entry = self._obj[i]
+                value = get_inner(get_nested(entry, keys), inner_keys)
+                if value is not None:
+                    print("[{0}] {1}".format(i, value))
+                    count += 1
+        else:
+            count = len(self._obj)
+            keys = self._view.split(".")
+            for i in range(len(self._obj)):
+                entry = self._obj[i]
+                print("[{0}] {1}".format(i, get_nested(entry, keys)))
+
+        total = len(self._obj)
+        print("Total entries: {0} | excluded: {1}".format(total, total - count))
 
     def set_view(self, query):
         self._view = query
