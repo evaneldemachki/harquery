@@ -17,7 +17,7 @@ def create_profile(name):
             time.sleep(1)
     
     try:
-        if os.listdir(pwd+"/dump")[0].split(".")[1] == "har":
+        if os.listdir(pwd+"/dump")[0].split(".")[-1] == "har":
             fpath = pwd+"/dump/" + os.listdir(pwd+"/dump")[0]
         else:
             raise ValueError("incorrect file extension")
