@@ -121,6 +121,7 @@ class Filters:
 class Profile:
     def __init__(self, name):
         self._name = name
+        self._view = None
         path = pdir + "/profile/{0}".format(name)
         if not os.path.exists(path):
             raise FileNotFoundError(path)

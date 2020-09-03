@@ -1,2 +1,2 @@
-from haranalyze.api import create_profile
-from haranalyze.core import Profile
+from api import create_profile
+from core import Profile
