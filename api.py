@@ -5,6 +5,9 @@ import json
 from haranalyze.core import Profile
 from selenium import webdriver
 from browsermobproxy import Server
+import urllib.request
+import urllib.robotparser
+
 
 #Creates any missing paths that are needed for this program
 def create_missing_paths(path):
@@ -43,6 +46,13 @@ def clear_old_files(path):
             except OSError as error:
                 print(error)
 
+def get_robots_list(url) -> list:
+    rp = urllib.robotparser.RobotFileParser()
+    rp.set_url("http://google.com/robots.txt")
+    rp.read()
+    rrate = rp.request_rate("*")
+    robotsTxt = rp.__str__()
+    return robotsList2.split("\n")
 
 def fetch_har_by_url(url):
     siteName = ''.join([i for i in url if i.isalpha() or i.isnumeric()])
@@ -80,6 +90,7 @@ def fetch_har_by_url(url):
 
 def create_profile(url):
     #TODO: delete old files first
+    robotsTxt = get_robots_list(url)
     path = fetch_har_by_url(url)
 
     with open(path + "/filters.json", "w") as f:
