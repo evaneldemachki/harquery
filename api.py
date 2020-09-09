@@ -6,13 +6,51 @@ from haranalyze.core import Profile
 from selenium import webdriver
 from browsermobproxy import Server
 
-pwd = os.path.dirname(__file__)
-if not os.path.exists(pwd+"/dump"):
-    os.mkdir(pwd+"/dump")
-if not os.path.exists(pwd+"/profile"):
-    os.mkdir(pwd+"/profile")
+#Creates any missing paths that are needed for this program
+def create_missing_paths(path):
+        if not os.path.exists(os.path.join(os.getcwd(), "/haranalyze")):
+            try:
+                os.mkdir(os.getcwd() + "/haranalyze")
+            except OSError as error:
+                print(error)
+
+
+        if not os.path.exists(os.path.join(os.getcwd(), "/haranalyze/profile")):
+            try:
+                os.mkdir(os.path.join(os.getcwd(), "/haranalyze/profile"))
+            except OSError as error:
+                print(error)
+
+        if not os.path.exists(path):
+            try:
+                os.mkdir(path)
+            except OSError as error:
+                print(error)
+
+#Delete any har or json that may exist from a pervious run on the same URL
+def clear_old_files(path):
+        if os.path.exists(path + "/source.har"):
+            print("Source found")
+            try:
+                os.remove(path + "/source.har")
+            except OSError as error:
+                print(error)
+
+        if os.path.exists(path + "/filters.json"):
+            print("Source found")
+            try:
+                os.remove(path + "/filters.json")
+            except OSError as error:
+                print(error)
+
 
 def fetch_har_by_url(url):
+    siteName = ''.join([i for i in url if i.isalpha() or i.isnumeric()])
+    path = os.getcwd() + "/haranalyze/profile/{0}/".format(siteName)
+
+    create_missing_paths(path)
+    clear_old_files(path)
+
     server = Server("./browsermob-proxy-2.1.4//bin//browsermob-proxy")
     server.start()
     proxy = server.create_proxy()
@@ -31,37 +69,21 @@ def fetch_har_by_url(url):
     har = proxy.har
     print(har) # returns a HAR JSON blob
 
-    pwd = os.path.dirname(__file__)
-    if not os.path.exists("./URLdump"):
-        os.mkdir("./URLdump")
-    if not os.path.exists("./URLdump/" + url):
-        os.mkdir("./URLdump/" + url)
-
-    with open('./URLdump/' + url + '/source.har', 'w') as json_file:
+    with open(path + "source.har", 'w') as json_file:
         json.dump(har, json_file)
 
     server.stop()
     driver.quit()
 
-def create_profile(name):
-    if len(os.listdir(pwd+"/dump")) == 0:
-        print("listening for HAR file...")
-        while len(os.listdir(pwd+"/dump")) == 0:
-            time.sleep(1)
+    #TODO: Justin - We should add checks to make sure this path exists incase the har fetch failed.
+    return path
 
-    try:
-        if os.listdir(pwd+"/dump")[0].split(".")[-1] == "har":
-            fpath = pwd+"/dump/" + os.listdir(pwd+"/dump")[0]
-        else:
-            raise ValueError("incorrect file extension")
-    except:
-        raise ValueError("no file extension")
+def create_profile(url):
+    #TODO: delete old files first
+    path = fetch_har_by_url(url)
 
-    profile_path = pwd+"/profile/{0}".format(name)
-    os.mkdir(profile_path)
-    shutil.move(fpath, profile_path + "/source.har")
-    with open(profile_path + "/filters.json", "w") as f:
+    with open(path + "/filters.json", "w") as f:
         json.dump([], f)
 
-    print("created profile: {0}".format(name))
-    return Profile(name)
+#    print("created profile: {0}".format(name))
+#    return Profile(name)
