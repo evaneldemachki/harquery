@@ -51,8 +51,7 @@ def get_robots_list(url) -> list:
     rp.set_url("http://google.com/robots.txt")
     rp.read()
     rrate = rp.request_rate("*")
-    robotsTxt = rp.__str__()
-    return robotsList2.split("\n")
+    return rp.__str__().split("\n")
 
 def fetch_har_by_url(url):
     siteName = ''.join([i for i in url if i.isalpha() or i.isnumeric()])
