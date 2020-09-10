@@ -9,48 +9,54 @@ import urllib.request
 import urllib.robotparser
 import hashlib
 
-# add geckoDriver.exe to PATH
-os.environ["PATH"] += os.path.dirname(__file__)
+if os.name == 'nt':
+    # add geckoDriver.exe to PATH
+    os.environ["PATH"] += os.path.dirname(__file__)
 
 def parse_url(url):
     for leader in ("https://", "http://", "www."):
         if url[:len(leader)] == leader:
             url = url[len(leader):]
-    
+
     if url[-1] == "/":
         url = url[:-1]
 
     return url.split("/")
 
-# Creates any missing paths that are needed for this program
-def auto_index(segments):
-    bin_path = os.path.join(os.getcwd(), "har.bin")
-    if not os.path.exists(bin_path):
+#Delete any har or json that may exist from a pervious run on the same URL
+def clear_last(path):
+    if os.path.exists(os.path.join(path, "source.har")):
         try:
-            os.mkdir(bin_path)
+            os.remove(os.path.join(path, "source.har"))
         except OSError as error:
             raise error
 
+#Just a simple function to call for creating a class to clean up the constant if, try, except code from other functions
+def create_path(path):
+    if not os.path.exists(path):
+         try:
+             os.mkdir(path)
+         except OSError as error:
+             raise error
+
+# Creates any missing paths that are needed for this program
+def auto_index(segments):
+    bin_path = os.path.join(os.getcwd(), "har.bin")
+    create_path(bin_path)
+
+
     prof_path = os.path.join(bin_path, "profile")
-    if not os.path.exists(prof_path):
-        try:
-            os.mkdir(prof_path)
-        except OSError as error:
-            raise error
-    
+    create_path(prof_path)
+
     root_path = os.path.join(prof_path, segments[0])
-    if not os.path.exists(root_path):
-        try:
-            os.mkdir(root_path)
-        except OSError as error:
-            raise error
+    create_path(root_path)
 
     index_path = os.path.join(root_path, "index.json")
     if os.path.exists(index_path):
         with open(index_path, "r") as f:
             index = json.load(f)
     else:
-        index = {}   
+        index = {}
 
     index_cursor = index
     file_cursor = root_path
@@ -62,25 +68,12 @@ def auto_index(segments):
 
         fn_hash = hashlib.sha1(node.encode("utf-8")).hexdigest()
         file_cursor = os.path.join(file_cursor, fn_hash)
-        if not os.path.exists(file_cursor):
-            try:
-                os.mkdir(file_cursor)
-            except OSError as error:
-                raise error
-    
+        create_path(file_cursor)
+
     with open(index_path, "w") as f:
         json.dump(index, f)
 
     return file_cursor
-
-#Delete any har or json that may exist from a pervious run on the same URL
-def clear_last(path):
-    if os.path.exists(os.path.join(path, "source.har")):
-        print("Source found")
-        try:
-            os.remove(os.path.join(path, "source.har"))
-        except OSError as error:
-            raise error
 
 def get_robots_list(url) -> list:
     print(url)
@@ -121,7 +114,7 @@ def fetch_har_by_url(url):
     driver.quit()
 
     return os.path.join(
-        os.getcwd(), "har.bin", 
+        os.getcwd(), "har.bin",
         "profile", segments[0]
     )
 
