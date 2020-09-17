@@ -2,8 +2,55 @@ import os
 import json
 from copy import deepcopy
 import pprint
+from selenium import webdriver
+from browsermobproxy import Server
+import urllib.request
+import urllib.robotparser
+
+from harquery.tree import segments_to_path, profile_tree
 
 pdir = os.path.dirname(__file__)
+
+def fetch_har_by_url(url, segments, index):
+    project_dir = os.path.dirname(__file__)
+    bpm_path = os.path.join(project_dir, "browsermob-proxy-2.1.1/bin/browsermob-proxy")
+
+    server = Server(bpm_path)
+    server.start()
+    proxy = server.create_proxy()
+
+    profile  = webdriver.FirefoxProfile()
+    profile.set_proxy(proxy.selenium_proxy())
+    driver = webdriver.Firefox(firefox_profile=profile)
+
+    proxy.new_har(url, options={'captureHeaders': True, 'captureContent': True, 'captureBinaryContent': True})
+    proxy.wait_for_traffic_to_stop(2000, 10000)
+
+    driver.get(url)
+
+    har = proxy.har
+
+    server.stop()
+    driver.quit()
+
+    return har
+
+def get_robots_list(url) -> list:
+    rp = urllib.robotparser.RobotFileParser()
+    rp.set_url("{0}/robots.txt".format(url))
+    rp.read()
+    rrate = rp.request_rate("*")
+    return rp.__str__().split("\n")
+
+def parse_url(url):
+    for leader in ("https://", "http://", "www."):
+        if url[:len(leader)] == leader:
+            url = url[len(leader):]
+
+    if url[-1] == "/":
+        url = url[:-1]
+
+    return url.split("/")
 
 def query_switch(query):
     if "!=" in query:
@@ -50,17 +97,27 @@ class Filters:
             self._profile._obj, _ = self._run(query)
 
     def add(self, query):
+        if self._profile._source is None:
+            print("Cannot use filters on empty profile segment")
+            return
+
         self._profile._obj, query = self._run(query)
         self._obj.append(query)
+        self._profile.save()
         print("added filter: {0}".format(query))
 
     def undo(self):
+        if self._profile._source is None:
+            print("Cannot use filters on empty profile segment")
+            return
+
         self._profile._obj = deepcopy(self._profile._source)
         last_query = self._obj[-1]
         for query in self._obj[:-1]:
             self._profile._obj, _ = self._run(query)
 
         self._obj.pop(-1)
+        self._profile.save()
         print("removed filter: {0}".format(last_query))
 
     def _run(self, query):
@@ -119,30 +176,48 @@ class Filters:
     __str__ = __repr__
 
 class Profile:
-    def __init__(self, name):
-        self._name = name
+    def __init__(self, segments):
+        self._segments = segments
         self._view = None
-        path = pdir + "/profile/{0}".format(name)
-        if not os.path.exists(path):
-            raise FileNotFoundError(path)
 
-        # assure that source HAR file exists
-        source_path = path + "/source.har".format(name)
-        if not os.path.exists(source_path):
-            raise FileNotFoundError(source_path)
-        # load source as dict
-        with open(source_path, "r", encoding="utf-8") as f:
-            self._source = json.load(f)["log"]["entries"]
+        base = segments[0]
+        base_path = os.path.join(
+            os.getcwd(), "har.bin", "profile", base)
+        
+        index_path = os.path.join(base_path, "index.json")
+        with open(index_path, "r") as f:
+            self._index = json.load(f)
 
-        self._obj = deepcopy(self._source)
+        self._cursor = segments
+        self._load()
 
-        # assure that filters JSON exists
-        filters_path = path + "/filters.json"
-        if not os.path.exists(filters_path):
-            raise FileNotFoundError(filters_path)
-        # load profile as dict
-        with open(filters_path, "r") as f:
-            self.filters = Filters(self, json.load(f))
+    @property
+    def tree(self):
+        print(profile_tree(self._index))
+
+    def cd(self, loc):
+        rel_cursor = loc.split("/")
+        if any(rel == "{hash}" for rel in rel_cursor):
+            raise KeyError("ERROR: referenced reserved key '{hash}'")
+
+        cursor = self._cursor[:]
+        for rel in rel_cursor:
+            if rel == ".":
+                continue
+            elif rel == "..":
+                cursor.pop()
+                continue
+            else:
+                cursor.append(rel)
+        
+        try:
+            path = segments_to_path(self._index, cursor)
+        except:
+            raise KeyError("ERROR: profile segment not found")
+
+        self._cursor = cursor
+        self._load()
+        print(str(self))
 
     # export current proxy to JSON file
     def export(self):
@@ -153,11 +228,16 @@ class Profile:
 
     # TODO: add filter by domain name (ie. term before .com/.net etc.)
 
-
     def reset_view(self):
+        if self._source is None:
+            print("This profile segment is empty")
+            return
         self._view = None
 
     def show(self):
+        if self._source is None:
+            print("This profile segment is empty")
+            return
         if self._view is None:
             pprint.pprint(self._obj)
             return
@@ -185,32 +265,46 @@ class Profile:
         print("Total entries: {0} | excluded: {1}".format(total, total - count))
 
     def set_view(self, query):
+        if self._source is None:
+            print("This profile segment is empty")
+            return
         self._view = query
         print("set view to '{0}'".format(query))
 
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @name.setter # rename profile directory name on name change
-    def name(self, value):
-        current_name = self.name
-        # rename profile folder
-        new_path = pdir + "/profile/{0}".format(value)
-        os.rename(pdir + "/profile/{0}".format(self.name), new_path)
-        self._path = new_path
-        self._name = value
-
-        print("renamed profile: {0} -> {1}".format(current_name, value))
-
     def save(self):
-        path = pdir + "/profile/{0}/filters.json".format(self.name)
-        with open(path, "w") as f:
+        if self._source is None:
+            print("This profile segment is empty")
+            return
+        path = os.path.join(segments_to_path(self._index, self._cursor))
+        filters_path = os.path.join(path, "filters.json")
+        with open(filters_path, "w") as f:
             json.dump(self.filters._obj, f)
 
         print("saved profile filters")
 
+    def _load(self):
+        cursor_path = segments_to_path(self._index, self._cursor)
+        # assure that source HAR file exists
+        source_path = os.path.join(cursor_path, "source.har")
+        if not os.path.exists(source_path):
+            self._source = None
+            self._obj = None
+        else: # load source as dict
+            with open(source_path, "r") as f:
+                self._source = json.load(f)["log"]["entries"]
+                self._obj = deepcopy(self._source)
+
+        # assure that filters JSON exists
+        filters_path = os.path.join(cursor_path, "filters.json")
+        # load filters
+        with open(filters_path, "r") as f:
+            self.filters = Filters(self, json.load(f))
+
     def __repr__(self):
-        return "Profile: {0}".format(self.name)
+        routes = "{0}".format(self._cursor[0])
+        for r in self._cursor[1:]:
+            routes += " > {0}".format(r)
+
+        return "Profile: {0}".format(routes)
 
     __str__ = __repr__

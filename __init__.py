@@ -1,2 +1,2 @@
-from haranalyze.api import create_profile
-from haranalyze.core import Profile
+from harquery.api import touch, create_profile, load_profile
+from harquery.core import Profile
