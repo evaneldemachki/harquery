@@ -3,6 +3,7 @@ import json
 
 from harquery.core import Profile, fetch_har_by_url, parse_url
 from harquery.tree import segments_to_path, index_profile
+from harquery.endpoint import Endpoint
 
 if os.name == 'nt':
     # add geckoDriver.exe to PATH
@@ -15,6 +16,9 @@ def touch():
 
     prof_path = os.path.join(bin_path, "profile")
     os.mkdir(prof_path)
+
+    ep_path = os.path.join(bin_path, "endpoint")
+    os.mkdir(ep_path)
 
 def create_profile(url):
     #robotsTxt = get_robots_list(url)
@@ -45,3 +49,13 @@ def load_profile(name):
     else:
         print("Profile for '{0}' does not exist".format(name))
         return
+
+def create_endpoint(entry):
+    try:
+        return Endpoint(entry)
+    except error:
+        raise error
+
+# TODO
+def load_endpoint(entry):
+    pass

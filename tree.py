@@ -46,6 +46,7 @@ def index_profile(segments):
             filters_path = os.path.join(file_cursor, "filters.json")
             with open(filters_path, "w") as f:
                 json.dump([], f)
+
         else:
             index_cursor = index_cursor[seg]
             file_cursor = os.path.join(file_cursor, index_cursor["{hash}"])

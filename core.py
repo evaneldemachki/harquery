@@ -6,6 +6,7 @@ from selenium import webdriver
 from browsermobproxy import Server
 import urllib.request
 import urllib.robotparser
+from urllib.parse import urlparse, unquote
 
 from harquery.tree import segments_to_path, profile_tree
 
@@ -218,6 +219,14 @@ class Profile:
         self._cursor = cursor
         self._load()
         print(str(self))
+    
+    def expand(self, index, *keys):
+        entry = self._obj[index]
+        inner = get_nested(entry, keys)
+        if isinstance(inner, str):
+            print(inner)
+        else:
+            pprint.pprint(inner)
 
     # export current proxy to JSON file
     def export(self):
@@ -294,9 +303,8 @@ class Profile:
                 self._source = json.load(f)["log"]["entries"]
                 self._obj = deepcopy(self._source)
 
-        # assure that filters JSON exists
-        filters_path = os.path.join(cursor_path, "filters.json")
         # load filters
+        filters_path = os.path.join(cursor_path, "filters.json")
         with open(filters_path, "r") as f:
             self.filters = Filters(self, json.load(f))
 
