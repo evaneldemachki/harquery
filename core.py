@@ -9,8 +9,9 @@ import urllib.robotparser
 from urllib.parse import urlparse, unquote
 
 from harquery.tree import segments_to_path, profile_tree
+from harquery import _geckodriver
+from harquery.query import execute
 
-pdir = os.path.dirname(__file__)
 
 def fetch_har_by_url(url, segments, index):
     project_dir = os.path.dirname(__file__)
@@ -22,7 +23,12 @@ def fetch_har_by_url(url, segments, index):
 
     profile  = webdriver.FirefoxProfile()
     profile.set_proxy(proxy.selenium_proxy())
-    driver = webdriver.Firefox(firefox_profile=profile)
+    
+    driver = webdriver.Firefox(
+        firefox_profile=profile, 
+        executable_path=os.path.join(
+            os.path.dirname(__file__), _geckodriver)
+    )
 
     proxy.new_har(url, options={'captureHeaders': True, 'captureContent': True, 'captureBinaryContent': True})
     proxy.wait_for_traffic_to_stop(2000, 10000)
@@ -53,42 +59,6 @@ def parse_url(url):
 
     return url.split("/")
 
-def query_switch(query):
-    if "!=" in query:
-        return lambda a,b: a != b, "!="
-    elif "=" in query:
-        return lambda a,b: a == b, "="
-    elif "!#" in query:
-        return lambda a,b: b not in a, "!#"
-    elif "#" in query:
-        return lambda a,b: b in a, "#"
-    else:
-        return None, None
-
-def get_nested(entry, keys):
-    item = entry
-    for key in keys:
-        item = item[key]
-
-    return item
-
-def get_inner(entry, keys):
-    # keys = [{name:content-type}, [value]]
-    locator = keys[0][1:-1].split(":")
-    # locator = [name, content-type]
-    section = None
-    for item in entry:
-        if locator[0] in item:
-            if item[locator[0]] == locator[1]:
-                section = item
-                break
-
-    if section is None: # locator key/value pair not found
-        return None
-
-    value = get_nested(section, keys[1])
-    return value
-
 class Filters:
     def __init__(self, profile, obj):
         self._profile = profile
@@ -97,79 +67,73 @@ class Filters:
         for query in self._obj:
             self._profile._obj, _ = self._run(query)
 
+    def use(self, name: str):
+        preset_path = os.path.join(os.getcwd(), "har.bin", "presets", name + ".json")
+        if not os.path.exists(preset_path):
+            raise FileNotFoundError
+        
+        with open(preset_path, "r") as f:
+            obj = json.load(f)
+        
+        for query in obj:
+            self._profile._obj, _ = self._run(query)
+
+        self._obj = obj
+
+        print("using filters preset: {0}".format(name))
+
     def add(self, query):
         if self._profile._source is None:
             print("Cannot use filters on empty profile segment")
             return
 
-        self._profile._obj, query = self._run(query)
-        self._obj.append(query)
+        doc = execute(
+            self._profile._obj,
+            query, "filter"
+        )
+
+        self._profile._obj = doc["cursor"]
+        self._obj.append({
+            "interpreted": doc["interpreted"],
+            "instructions": doc["instructions"]
+        })
+
         self._profile.save()
         print("added filter: {0}".format(query))
 
-    def undo(self):
+    def drop(self, index: int):
         if self._profile._source is None:
             print("Cannot use filters on empty profile segment")
             return
-
-        self._profile._obj = deepcopy(self._profile._source)
-        last_query = self._obj[-1]
-        for query in self._obj[:-1]:
-            self._profile._obj, _ = self._run(query)
-
-        self._obj.pop(-1)
-        self._profile.save()
-        print("removed filter: {0}".format(last_query))
-
-    def _run(self, query):
-        query = query.replace(" ","")
-
-        base_op, op_key = query_switch(query)
-        if base_op is None or op_key is None:
-            raise ValueError("invalid query: no match operators")
+        if index < 0:
+            index = len(self._obj) + index
+        if index < 0 or index >= len(self._obj):
+            raise IndexError
             
-        op = lambda a,b: base_op(a,b) if a is not None else False
-        # response.headers@{name:content-type}->value=application/json
-        query_split = query.split(op_key)
-        # [response.headers@{name:content-type}->value, application/json]
-        assert len(query_split) == 2, "invalid query: duplicate match operators"
-        if "@" in query_split[0]:
-            sub_split = query_split[0].split("@")
-            # [response.headers, {name:content-type}->value]
-            keys = sub_split[0].split(".")
-            # [response, headers]
-            inner_keys = sub_split[1].split("->")
-            # [{name:content-type}, value]
-            inner_keys[1] = inner_keys[1].split(".")
-            # [{name:content-type}, [value]]
-            get_func = lambda entry, keys: get_inner(get_nested(entry, keys), inner_keys)
-        else:
-            keys = query_split[0].split(".")
-            get_func = get_nested
+        self._profile._obj = deepcopy(self._profile._source)
+        drop_query = self._obj[index]
+        new_obj = self._obj[:index] + self._obj[index+1:]
+        for query in new_obj:
+            self._profile._obj = execute(
+                self._profile._obj,
+                query, "filter"
+            )
 
-        value = query_split[1]
-        old_value = value # save for return query replacement
+        self._obj = new_obj
+        self._profile.save()
 
-        # check for reference notation (inserts value from corresponding entry)
-        if value[0]=="[" and value[-1]=="]":
-            try:
-                index = int(value[1:-1])
-            except:
-                raise ValueError("invalid index notation")
+        print("removed filter: {0}".format(drop_query))
+    
+    def clear(self):
+        self._profile._obj = deepcopy(self._profile._source)
+        self._obj = []
 
-            value = get_func(self._profile._obj[index], keys)
-
-        obj = []
-        for entry in self._profile._obj:
-            if op(get_func(entry, keys), value):
-                obj.append(entry)
-
-        return obj, query.replace(old_value, value)
+        print("removed all filters")
 
     def __repr__(self):
         repr_str = ""
         for i in range(len(self._obj)):
-            query = self._obj[i]
+            query = self._obj[i]["interpreted"]
             repr_str += "[{0}] {1}\n".format(i, query)
 
         return repr_str
@@ -183,7 +147,7 @@ class Profile:
 
         base = segments[0]
         base_path = os.path.join(
-            os.getcwd(), "har.bin", "profile", base)
+            os.getcwd(), "har.bin", "profiles", base)
         
         index_path = os.path.join(base_path, "index.json")
         with open(index_path, "r") as f:
@@ -219,25 +183,36 @@ class Profile:
         self._cursor = cursor
         self._load()
         print(str(self))
+
+    def get(self, index, query):
+        entry = self._obj[index]
+        inner = get_nested(entry, keys)
+        return inner      
     
-    def expand(self, index, *keys):
+    def expand(self, index, query):
         entry = self._obj[index]
         inner = get_nested(entry, keys)
         if isinstance(inner, str):
             print(inner)
         else:
             pprint.pprint(inner)
+    
+    def raw_search(self, query):
+        matches = []
+        for i in range(0, len(self._obj)):
+            obj = get_nested(self._obj[i], keys)
 
-    # export current proxy to JSON file
-    def export(self):
-        pass
-    # create sub-profile for nested API calls
-    def branch(self, name):
-        pass
-
-    # TODO: add filter by domain name (ie. term before .com/.net etc.)
-
-    def reset_view(self):
+            if isinstance(obj, str):
+                raw_obj = obj
+            else:
+                raw_obj = json.dumps(obj)
+                
+            if term in raw_obj:
+                matches.append(i)
+        
+        return matches
+                    
+    def release(self):
         if self._source is None:
             print("This profile segment is empty")
             return
@@ -251,29 +226,16 @@ class Profile:
             pprint.pprint(self._obj)
             return
 
-        if "@" in self._view:
-            view_split = self._view.split("@")
-            inner_keys = view_split[1].split("->")
-            inner_keys[1] = inner_keys[1].split(".")
-            keys = view_split[0].split(".")
-            count = 0
-            for i in range(len(self._obj)):
-                entry = self._obj[i]
-                value = get_inner(get_nested(entry, keys), inner_keys)
-                if value is not None:
-                    print("[{0}] {1}".format(i, value))
-                    count += 1
-        else:
-            count = len(self._obj)
-            keys = self._view.split(".")
-            for i in range(len(self._obj)):
-                entry = self._obj[i]
-                print("[{0}] {1}".format(i, get_nested(entry, keys)))
+        doc = execute(self._obj, self._view, "select")
+
+        for i in range(len(doc["cursor"])):
+            entry = doc["cursor"][i]
+            print("[{0}] {1}".format(i, entry))
 
         total = len(self._obj)
-        print("Total entries: {0} | excluded: {1}".format(total, total - count))
+        print("Total entries: {0}".format(total))
 
-    def set_view(self, query):
+    def select(self, query):
         if self._source is None:
             print("This profile segment is empty")
             return

@@ -6,7 +6,7 @@ import json
 def segments_to_path(index, segments):
     index_cursor = index
     path = os.path.join(
-        os.getcwd(), "har.bin", "profile", segments[0])
+        os.getcwd(), "har.bin", "profiles", segments[0])
 
     for key in segments[1:]:
         index_cursor = index_cursor[key]
@@ -17,11 +17,12 @@ def segments_to_path(index, segments):
 
 def index_profile(segments):
     base_path = os.path.join(
-        os.getcwd(), "har.bin", "profile", segments[0])
+        os.getcwd(), "har.bin", "profiles", segments[0])
 
     filters_path = os.path.join(base_path, "filters.json")
-    with open(filters_path, "w") as f:
-        json.dump([], f)
+    if not os.path.exists(filters_path):
+        with open(filters_path, "w") as f:
+            json.dump([], f)
     
     index_path = os.path.join(base_path, "index.json")
     if os.path.exists(index_path):

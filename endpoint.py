@@ -1,4 +1,4 @@
-from urllib.parse import urlparse, parse_qs, parse_qsl
+from urllib.parse import urlparse, parse_qs, parse_qsl, urlencode
 import pprint
 
 class QueryArray:
@@ -10,7 +10,13 @@ class QueryArray:
             return self._data[i]
         except:
             raise KeyError
+    
+    def __iter__(self):
+        return self._data.__iter__()
  
+    def __len__(self):
+        return len(self._data)
+
     def __add__(self, value):
         if value not in self._data:
             return QueryArray(self._data + [value])
@@ -40,7 +46,11 @@ class Query:
         self._data = {}
         data = parse_qs(query_str)
         for key in data:
+            print(data[key])
             self._data[key] = QueryArray(data[key])
+    
+    def encode(self):
+        return urlencode(self._data, doseq=True)
     
     def __getitem__(self, key):
         try:
@@ -64,6 +74,13 @@ class Query:
             except:
                 raise TypeError
     
+    def __iter__(self):
+        for key in self._data:
+            yield key
+    
+    def __len__(self):
+        return len(self._data)
+    
     def __repr__(self):
         repr_str = "QUERY\n"
         for key in self._data:
@@ -77,6 +94,9 @@ class Headers:
     def __init__(self, headers):
         self._data = headers
     
+    def to_dict(self):
+        return dict(self._data)
+
     def __getitem__(self, key):
         for entry in self._data:
             if entry["name"] == key:
@@ -128,6 +148,14 @@ class Endpoint:
     @property
     def query(self):
         return self._query
+
+    def encode(self):
+        url_string = self._url + "?"
+        url_string += self._query.encode()
+        return url_string
+    
+    def har(self):
+        pass
     
     def __repr__(self):
         repr_str = "URL: {0}\n".format(self._url)
