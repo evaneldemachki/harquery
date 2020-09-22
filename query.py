@@ -1,9 +1,5 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, Any
 from copy import deepcopy
-import json
-
-with open("query-test.json", "r") as f:
-    obj = json.load(f)["log"]["entries"]
 
 class QueryError(Exception):
     """Exception raised if invalid query string passed"""
@@ -140,7 +136,7 @@ def build(query_terms: list, logical_terms: list) -> Tuple[tuple]:
 
     return obj
 
-def query_switch(query):
+def query_switch(query: str):
     if query == "!=":
         return lambda a,b: a != b
     elif query == "=":
@@ -153,14 +149,14 @@ def query_switch(query):
         return None, None
 
 
-def get_nested(entry, keys):
+def get_nested(entry: dict, keys: list) -> Any:
     item = entry
     for key in keys:
         item = item[key]
 
     return item
     
-def run(obj: list, query: list, goal: str = "select"):
+def run(obj: list, query: list, goal: str = "select") -> list:
     cursor = []
     for i in range(len(obj)):
         focus = obj[i]
@@ -175,8 +171,6 @@ def run(obj: list, query: list, goal: str = "select"):
                 if locator is not None or end:
                     raise RuntimeError
                 try:
-                    print(focus.keys())
-                    print(ix)
                     focus = get_nested(focus, ix)
                     if goal == "select":
                         response = focus
@@ -250,7 +244,7 @@ def run(obj: list, query: list, goal: str = "select"):
     
     return cursor
 
-def execute(obj, query, method):
+def execute(obj: dict, query: str, method: str) -> dict:
     x, y = reformat(query)
     x, y = process(x, y)
     instructions = build(x, y)
