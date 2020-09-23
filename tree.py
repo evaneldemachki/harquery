@@ -68,7 +68,7 @@ def profile_tree(base, index, n=0):
         tree_string += prefix + key + "\n"
 
         if len(child) > 1:
-            tree_string += profile_tree(base, child, n + 1)
+            tree_string += profile_tree(base, child, n + 1) + "\n"
     
     return tree_string[:-1]
 

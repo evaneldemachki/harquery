@@ -81,7 +81,7 @@ class Filters:
             self._profile._obj = execute(
                 self._profile._obj, doc["object"], "filter")
 
-        self._obj = obj
+        self._obj = preset
 
         print("using filters preset: {0}".format(name))
 

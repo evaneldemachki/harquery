@@ -1,5 +1,6 @@
 from typing import Tuple, Union, Any
 from copy import deepcopy
+import json
 
 class QueryError(Exception):
     """Exception raised if invalid query string passed"""
@@ -83,23 +84,53 @@ def process(query: str, terms: list) -> Tuple[list, list]:
     return query_terms, logical_terms
 
 def parse_directive(directive: str) -> list:
-    if " " in directive:
-        raise QueryError("'{0}' is an invalid directive".format(directive))
+    components = []
     
-    raw_str = False
-    if directive[0] == "$": # object to raw string
-        directive = directive[1:]
-        raw_str = True
+    last = ""
+    i = 0
+    while i < len(directive):
+        char = directive[i]
+        if char in ["$", "~"]:
+            if i == len(directive) - 1:
+                raise QueryError("incomplete directive expression")
+            elif directive[i+1] != "(":
+                raise QueryError("un-enclosed conversion")
+            
+            level, found = 0, False
+            for j in range(i+2, i + 2 + len(directive[i+2:])):
+                if directive[j] == "(":
+                    level += 1
+                elif directive[j] == ")":
+                    if level == 0:
+                        diff = len(directive) - j
+                        inner = parse_directive(directive[i+2:][:-diff])
+                        inner.append(char)
+                        components.append(inner)
+                        i = j + 1
+                        found = True
+                        break
+                    else:
+                        level -= 1
+            
+            if not found:
+                raise QueryError("un-matched bracket")
+        elif char == ".":
+            if i == len(directive) - 1:
+                raise IndexError
+            
+            if last != "":
+                components.append(last)
+                last = ""
 
-    reserved = ["!", "#", "=", "@", "->", "$"]
-    if any(key in directive for key in reserved):
-        raise QueryError("'{0}' is an invalid directive".format(directive))
+            i += 1
+        else:
+            last += char
+            i += 1
     
-    directive = directive.split(".")
-    if raw_str:
-        directive.append("$")
-    
-    return directive
+    if last != "":
+        components.append(last)
+
+    return components
 
 def parse_literal(literal: str) -> Union[str, int]:
     if literal[0] == literal[-1] == '"':
@@ -127,26 +158,77 @@ def build(query_terms: list, logical_terms: list) -> Tuple[tuple]:
 
     return obj
 
+def compare_ne(a, b):
+    if isinstance(a, str):
+        a = a.lower()
+    if isinstance(b, str):
+        b = b.lower()
+    
+    return a != b
+
+def compare_eq(a, b):
+    if isinstance(a, str):
+        a = a.lower()
+    if isinstance(b, str):
+        b = b.lower()
+
+    return a == b
+
+def compare_nc(a, b):
+    if isinstance(a, str):
+        a = a.lower()
+    if isinstance(b, str):
+        b = b.lower()
+    
+    if a is not None:
+        return b not in a
+    else:
+        return False
+
+def compare_ct(a, b):
+    if isinstance(a, str):
+        a = a.lower()
+    if isinstance(b, str):
+        b = b.lower()
+    
+    if a is not None:
+        return b in a
+    else:
+        return False
+
+
 def compare(query: str):
     if query == "!=":
-        return lambda a,b: a != b
+        return compare_ne
     elif query == "=":
-        return lambda a,b: a == b
+        return compare_eq
     elif query == "!#":
-        return lambda a,b: (b not in a) if a is not None else False
+        return compare_nc
     elif query == "#":
-        return lambda a,b: (b in a) if a is not None else False
+        return compare_ct
 
 def get_nested(entry: dict, keys: list) -> Any:
     item = entry
     for i in range(len(keys)):
         key = keys[i]
+        if isinstance(key, list):
+            item = get_nested(item, key)
+            continue
+
         if key == "$":
             if i != len(keys) - 1:
                 raise QueryError("invalid directive")
             
             if not isinstance(item, str):
                 item = json.dumps(item)
+        elif key == "~":
+            if i != len(keys) - 1:
+                raise QueryError("invalid directive")
+            
+            try:
+                item = json.loads(item)
+            except:
+                raise QueryError("failed to parse string into dictionary")
         else:
             if key in item:
                 item = item[key]
@@ -254,26 +336,43 @@ def execute(obj: list, query: list, mode: str = "focus") -> list:
     
     return cursor
 
+def reconstruct_directive(entry: list) -> str:
+    directive = ""
+    if entry[-1] in ["$", "~"]:
+        directive += entry[-1] + "("
+        for item in entry[:-1]:
+            if isinstance(item, list):
+                directive += reconstruct_directive(item) + "."
+            elif isinstance(item, str):
+                directive += item + "."
+
+        directive = directive[:-1] + ")"
+    else:
+        for item in entry:
+            if isinstance(item, list):
+                directive += reconstruct_directive(item) + "."
+            elif isinstance(item, str):
+                directive += item + "."
+
+        directive = directive[:-1]
+
+    return directive    
+
 def parse(query: str) -> dict:
     x, y = reformat(query)
     x, y = process(x, y)
     instructions = build(x, y)
 
-    if instructions[0][1][-1] == "$":
-        interpreted = "$" + ".".join(instructions[0][1][:-1])
-    else:
-        interpreted = ".".join(instructions[0][1])
+    interpreted = ""
+    interpreted += reconstruct_directive(instructions[0][1])
+ 
+    for key in instructions[1:]:
+        interpreted += key[0]
+        if isinstance(key[1], str):
+            interpreted += "'{0}'".format(key[1])
+        else:
+            interpreted += reconstruct_directive(key[1])
 
-    for ref in instructions[1:]:
-        interpreted += ref[0]
-
-        if isinstance(ref[1], str):
-            interpreted += "'" + ref[1] + "'"
-        elif isinstance(ref[1], list):
-            if ref[1][-1] == "$":
-                interpreted += "$" + ".".join(ref[1][:-1])
-            else:
-                interpreted += ".".join(ref[1])
 
     doc = {
         "string": interpreted,
