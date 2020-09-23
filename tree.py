@@ -6,7 +6,7 @@ import json
 def segments_to_path(index, segments):
     index_cursor = index
     path = os.path.join(
-        os.getcwd(), "har.bin", "profiles", segments[0])
+        os.getcwd(), ".hq", "profiles", segments[0])
 
     for key in segments[1:]:
         index_cursor = index_cursor[key]
@@ -17,7 +17,7 @@ def segments_to_path(index, segments):
 
 def index_profile(segments):
     base_path = os.path.join(
-        os.getcwd(), "har.bin", "profiles", segments[0])
+        os.getcwd(), ".hq", "profiles", segments[0])
 
     filters_path = os.path.join(base_path, "filters.json")
     if not os.path.exists(filters_path):
@@ -57,8 +57,8 @@ def index_profile(segments):
     
     return index
 
-def profile_tree(index, n=0):
-    tree_string = ""
+def profile_tree(base, index, n=0):
+    tree_string = base + "\n" if n == 0 else ""
     for key in index:
         if key == "{hash}":
             continue
@@ -68,6 +68,18 @@ def profile_tree(index, n=0):
         tree_string += prefix + key + "\n"
 
         if len(child) > 1:
-            tree_string += profile_tree(child, n + 1)
+            tree_string += profile_tree(base, child, n + 1)
     
-    return tree_string
+    return tree_string[:-1]
+
+def list_profiles():
+    profiles_path = os.path.join(os.getcwd(), ".hq", "profiles")
+    count = 0
+    for prof in os.listdir(profiles_path):
+        prof_path = os.path.join(profiles_path, prof)
+        if os.path.isdir(prof_path):
+            count += 1
+            print("| " + prof)
+    
+    if count == 0:
+        print("No profiles have been created")

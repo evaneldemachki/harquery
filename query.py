@@ -86,11 +86,20 @@ def parse_directive(directive: str) -> list:
     if " " in directive:
         raise QueryError("'{0}' is an invalid directive".format(directive))
     
+    raw_str = False
+    if directive[0] == "$": # object to raw string
+        directive = directive[1:]
+        raw_str = True
+
     reserved = ["!", "#", "=", "@", "->", "$"]
     if any(key in directive for key in reserved):
         raise QueryError("'{0}' is an invalid directive".format(directive))
-
-    return directive.split(".")
+    
+    directive = directive.split(".")
+    if raw_str:
+        directive.append("$")
+    
+    return directive
 
 def parse_literal(literal: str) -> Union[str, int]:
     if literal[0] == literal[-1] == '"':
@@ -106,162 +115,169 @@ def build(query_terms: list, logical_terms: list) -> Tuple[tuple]:
     primary_directive = parse_directive(query_terms.pop(0))
     obj.append( ("?", primary_directive) )
 
-    state = False
-    locator = False
-    locator2 = False
     for i in range(len(query_terms)):
         term, op = query_terms[i], logical_terms[i]
-        if state is False:
-            if op in ["!=", "=", "!#", "#"]:
-                obj.append( (op, parse_literal(term)) )
-                if not locator2 and not locator:
-                    state = True
 
-            elif op == "@":
-                if i == len(query_terms) - 1:
-                    raise QueryError("expected directive following locator")
-                
-                obj.append( ("@", parse_directive(term)) )
-                locator = True
-            elif op == "->":
-                if not locator:
-                    raise QueryError("arrow operator detected but no locator has been declared")
-                
-                obj.append( ("->", parse_directive(term)) )
-                locator = False
-                locator2 = True
-        elif state is True:
-            print(obj)
-            raise QueryError("invalid query expression")
+        if op in ["!=", "=", "!#", "#"]:
+            obj.append( (op, parse_literal(term)) )
+        elif op == "@":     
+            obj.append( ("@", parse_directive(term)) )
+        elif op == "->": 
+            obj.append( ("->", parse_directive(term)) )
 
     return obj
 
-def query_switch(query: str):
+def compare(query: str):
     if query == "!=":
         return lambda a,b: a != b
     elif query == "=":
         return lambda a,b: a == b
     elif query == "!#":
-        return lambda a,b: b not in a
+        return lambda a,b: (b not in a) if a is not None else False
     elif query == "#":
-        return lambda a,b: b in a
-    else:
-        return None, None
-
+        return lambda a,b: (b in a) if a is not None else False
 
 def get_nested(entry: dict, keys: list) -> Any:
     item = entry
-    for key in keys:
-        item = item[key]
+    for i in range(len(keys)):
+        key = keys[i]
+        if key == "$":
+            if i != len(keys) - 1:
+                raise QueryError("invalid directive")
+            
+            if not isinstance(item, str):
+                item = json.dumps(item)
+        else:
+            if key in item:
+                item = item[key]
+            else:
+                return None
 
     return item
     
-def run(obj: list, query: list, goal: str = "select") -> list:
+def execute(obj: list, query: list, mode: str = "focus") -> list:
     cursor = []
     for i in range(len(obj)):
         focus = obj[i]
         locator = None
         response = None
-        arrow = False
-        end = False
-        for block in query:
-            key, ix = block
-
+        for key, ix in query:
             if key == "?":
-                if locator is not None or end:
+                if locator is not None:
                     raise RuntimeError
-                try:
-                    focus = get_nested(focus, ix)
-                    if goal == "select":
-                        response = focus
-                    else:
-                        response = i
-                except:
-                    raise QueryError("invalid directive '{0}'".format(ix))
+
+                focus = get_nested(focus, ix)
+                if mode == "focus":
+                    response = focus
+                else:
+                    response = obj[i]
             elif key == "@":
-                if locator is not None or end:
+                if locator is not None:
                     raise RuntimeError
 
                 try:
                     locator = focus
                     focus = []
                     for item in locator:
-                        focus.append(get_nested(item, ix))
+                        focus_item = get_nested(item, ix)
+                        focus.append(focus_item)
                     
-                    response = False
+                    if mode == "focus":
+                        response = focus
+                    else:
+                        response = obj[i]
                 except:
                     raise QueryError("invalid directive '{0}'".format(ix))
             elif key in ["!=", "=", "!#", "#"]:
-                if locator is not None:
-                    found = None
-                    for j in range(len(focus)):
-                        item = focus[j]
-                        if query_switch(key)(item, ix):
-                            found = j
-                            break
-                    
-                    if found is None:
-                        response = None
-                        break
-                    else:
-                        focus = locator[found]
-                        locator = None
-                        arrow = True
-                        if goal == "select":
-                            response = focus
+                # (default) focus:   Any            -> direct comparison -> return
+                #           locator: None           -> ignore
+                # (after @) focus:   list           -> element-wise comparison
+                #           locator: Iterable[dict] -> focus = locator -> reduce -> return
+                if locator is None:
+                    if compare(key)(focus, ix):
+                        if mode == "focus":
+                            response = True
                         else:
-                            response = i
+                            response = obj[i]
+                    else:
+                        if mode == "focus":
+                            response = False
+                        else:
+                            response = None
                 else:
-                    if arrow:
-                        raise QueryError("invalid query expression")
-
-                    if query_switch(key)(focus, ix):
-                        if goal == "select":
-                            response = focus
+                    # ex. if @ directive was: x and ix = A
+                    #   locator = [{x:A, y:1}, {x:B, y:3}, {x:A, y:4}]
+                    #   focus   = [A, B, A]
+                    match = [] # indices where comparison is True
+                    for j in range(len(focus)):
+                        if compare(key)(focus[j], ix):
+                            match.append(True)
                         else:
-                            response = i
-                    else:
-                        response = None
-                        break
-            elif key == "->":
-                if not arrow:
-                    raise QueryError("invalid query expression")
-                
-                try:
-                    focus = get_nested(focus, ix)
-                    arrow = False
-                    if goal == "select":
+                            match.append(False)
+
+                    focus = match
+                    if mode == "focus":
                         response = focus
                     else:
-                        response = i
-                except:
-                    raise QueryError("invalid directive '{0}'".format(ix))
+                        if not any(focus):
+                            response = None
+                        else:
+                            response = obj[i]
+            elif key == "->": 
+                # ex. focus   = [True, False, True]
+                #     locator = [{x:A, y:1}, {x:B, y:3}, {x:A, y:4}]
+                if not isinstance(focus, list):
+                    raise QueryError("expected type '{0}', got '{1}'".format(list, type(focus)))
+                if locator is None:
+                    raise QueryError("got '->' before locator")
+
+                match = []
+                for j in range(len(locator)):
+                    if focus[j]:
+                        focus_item = get_nested(locator[j], ix)
+                        match.append(focus_item)
+                    else:   
+                        match.append(None)
+
+                focus = match
+                if mode == "focus":
+                    response = [fi for fi in focus if fi is not None]
+                else:
+                    if not any(focus):
+                        response = None
+                    else:
+                        response = obj[i]
+
         
-        if response is not None and response is not False:
+        if response is not None:
             cursor.append(response)
-        elif response is False:
-            raise QueryError("incomplete query expression")
     
     return cursor
 
-def execute(obj: dict, query: str, method: str) -> dict:
+def parse(query: str) -> dict:
     x, y = reformat(query)
     x, y = process(x, y)
     instructions = build(x, y)
 
-    interpreted = ".".join(instructions[0][1])
+    if instructions[0][1][-1] == "$":
+        interpreted = "$" + ".".join(instructions[0][1][:-1])
+    else:
+        interpreted = ".".join(instructions[0][1])
+
     for ref in instructions[1:]:
         interpreted += ref[0]
 
         if isinstance(ref[1], str):
             interpreted += "'" + ref[1] + "'"
         elif isinstance(ref[1], list):
-            interpreted += ".".join(ref[1])
+            if ref[1][-1] == "$":
+                interpreted += "$" + ".".join(ref[1][:-1])
+            else:
+                interpreted += ".".join(ref[1])
 
     doc = {
-        "interpreted": interpreted,
-        "instructions": instructions,
-        "cursor": run(obj, instructions, method)
+        "string": interpreted,
+        "object": instructions
     }
 
     return doc

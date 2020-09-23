@@ -10,7 +10,7 @@ from urllib.parse import urlparse, unquote
 
 from harquery.tree import segments_to_path, profile_tree
 from harquery import _geckodriver
-from harquery.query import execute
+from harquery.query import parse, execute, get_nested
 
 
 def fetch_har_by_url(url, segments, index):
@@ -51,6 +51,7 @@ def get_robots_list(url) -> list:
 
 def parse_url(url):
     for leader in ("https://", "http://", "www."):
+        # if leader is in beginning of string
         if url[:len(leader)] == leader:
             url = url[len(leader):]
 
@@ -64,60 +65,58 @@ class Filters:
         self._profile = profile
         self._obj = obj
 
-        for query in self._obj:
-            self._profile._obj, _ = self._run(query)
+        for doc in self._obj:
+            data = execute(self._profile._obj, doc["object"], "filter")
+            self._profile._obj = data
 
     def use(self, name: str):
-        preset_path = os.path.join(os.getcwd(), "har.bin", "presets", name + ".json")
+        preset_path = os.path.join(os.getcwd(), ".hq", "presets", name + ".json")
         if not os.path.exists(preset_path):
             raise FileNotFoundError
         
         with open(preset_path, "r") as f:
-            obj = json.load(f)
+            preset = json.load(f)
         
-        for query in obj:
-            self._profile._obj, _ = self._run(query)
+        for doc in preset:
+            self._profile._obj = execute(
+                self._profile._obj, doc["object"], "filter")
 
         self._obj = obj
 
         print("using filters preset: {0}".format(name))
 
     def add(self, query):
-        if self._profile._source is None:
+        if self._profile._obj is None:
             print("Cannot use filters on empty profile segment")
             return
 
-        doc = execute(
-            self._profile._obj,
-            query, "filter"
-        )
+        doc = parse(query)
+        data = execute(
+            self._profile._obj, doc["object"], "filter")
 
-        self._profile._obj = doc["cursor"]
-        self._obj.append({
-            "interpreted": doc["interpreted"],
-            "instructions": doc["instructions"]
-        })
+        self._profile._obj = data
+        self._obj.append(doc)
 
         self._profile.save()
-        print("added filter: {0}".format(query))
+        print("added filter: {0}".format(doc["string"]))
 
     def drop(self, index: int):
-        if self._profile._source is None:
+        if self._profile._obj is None:
             print("Cannot use filters on empty profile segment")
             return
+
         if index < 0:
             index = len(self._obj) + index
         if index < 0 or index >= len(self._obj):
             raise IndexError
             
-        self._profile._obj = deepcopy(self._profile._source)
-        drop_query = self._obj[index]
+        self._profile._obj = self._profile._source
+
+        drop_query = self._obj[index]["string"]
         new_obj = self._obj[:index] + self._obj[index+1:]
-        for query in new_obj:
+        for doc in new_obj:
             self._profile._obj = execute(
-                self._profile._obj,
-                query, "filter"
-            )
+                self._profile._obj, doc["object"], "filter")
 
         self._obj = new_obj
         self._profile.save()
@@ -125,40 +124,36 @@ class Filters:
         print("removed filter: {0}".format(drop_query))
     
     def clear(self):
-        self._profile._obj = deepcopy(self._profile._source)
+        self._profile._obj = self._profile._source
         self._obj = []
 
         print("removed all filters")
 
     def __repr__(self):
         repr_str = ""
+        count = 0
         for i in range(len(self._obj)):
-            query = self._obj[i]["interpreted"]
+            query = self._obj[i]["string"]
             repr_str += "[{0}] {1}\n".format(i, query)
+            count += 1
 
-        return repr_str
+        if count == 0:
+            return "No filters added"
+        else:
+            return repr_str[:-1]
 
     __str__ = __repr__
 
 class Profile:
     def __init__(self, segments):
-        self._segments = segments
-        self._view = None
-
-        base = segments[0]
-        base_path = os.path.join(
-            os.getcwd(), "har.bin", "profiles", base)
-        
-        index_path = os.path.join(base_path, "index.json")
-        with open(index_path, "r") as f:
-            self._index = json.load(f)
-
         self._cursor = segments
+        self._focus = parse("request.url")
+
         self._load()
 
     @property
     def tree(self):
-        print(profile_tree(self._index))
+        print(profile_tree(self._cursor[0], self._index))
 
     def cd(self, loc):
         rel_cursor = loc.split("/")
@@ -184,68 +179,42 @@ class Profile:
         self._load()
         print(str(self))
 
-    def get(self, index, query):
+    def get(self, index, *keys):
+        if self._is_empty("GET"): return
+
         entry = self._obj[index]
         inner = get_nested(entry, keys)
         return inner      
     
-    def expand(self, index, query):
+    def expand(self, index, *keys):
+        if self._is_empty("EXPAND"): return
+
         entry = self._obj[index]
         inner = get_nested(entry, keys)
         if isinstance(inner, str):
             print(inner)
         else:
             pprint.pprint(inner)
-    
-    def raw_search(self, query):
-        matches = []
-        for i in range(0, len(self._obj)):
-            obj = get_nested(self._obj[i], keys)
 
-            if isinstance(obj, str):
-                raw_obj = obj
-            else:
-                raw_obj = json.dumps(obj)
-                
-            if term in raw_obj:
-                matches.append(i)
-        
-        return matches
-                    
-    def release(self):
-        if self._source is None:
-            print("This profile segment is empty")
-            return
-        self._view = None
+    def focus(self, query: str = "request.url"):
+        if self._is_empty("FOCUS"): return
+
+        self._focus = parse(query)
+        print("set view to '{0}'".format(query))
 
     def show(self):
-        if self._source is None:
-            print("This profile segment is empty")
-            return
-        if self._view is None:
-            pprint.pprint(self._obj)
-            return
+        if self._is_empty("SHOW"): return
 
-        doc = execute(self._obj, self._view, "select")
+        data = execute(
+            self._obj, self._focus["object"], "focus")
 
-        for i in range(len(doc["cursor"])):
-            entry = doc["cursor"][i]
-            print("[{0}] {1}".format(i, entry))
+        for i in range(len(data)):
+            print("[{0}] {1}".format(i, data[i]))
 
         total = len(self._obj)
         print("Total entries: {0}".format(total))
 
-    def select(self, query):
-        if self._source is None:
-            print("This profile segment is empty")
-            return
-        self._view = query
-        print("set view to '{0}'".format(query))
-
     def save(self):
-        if self._source is None:
-            print("This profile segment is empty")
-            return
         path = os.path.join(segments_to_path(self._index, self._cursor))
         filters_path = os.path.join(path, "filters.json")
         with open(filters_path, "w") as f:
@@ -253,22 +222,44 @@ class Profile:
 
         print("saved profile filters")
 
-    def _load(self):
+    @property
+    def _index(self):
+        index_path = os.path.join(
+            os.getcwd(), ".hq", "profiles", 
+            self._cursor[0], "index.json"
+        )
+        with open(index_path, "r") as f:
+            index = json.load(f)
+        
+        return index
+
+    @property
+    def _source(self):
         cursor_path = segments_to_path(self._index, self._cursor)
-        # assure that source HAR file exists
         source_path = os.path.join(cursor_path, "source.har")
         if not os.path.exists(source_path):
-            self._source = None
-            self._obj = None
-        else: # load source as dict
+            source = None
+        else:
             with open(source_path, "r") as f:
-                self._source = json.load(f)["log"]["entries"]
-                self._obj = deepcopy(self._source)
+                source = json.load(f)["log"]["entries"]
 
+        return source
+
+    def _load(self):
+        self._obj = self._source
         # load filters
+        cursor_path = segments_to_path(self._index, self._cursor)
         filters_path = os.path.join(cursor_path, "filters.json")
         with open(filters_path, "r") as f:
             self.filters = Filters(self, json.load(f))
+    
+    def _is_empty(self, action):
+        if self._obj is None:
+            msg = "Cannot perform action '{0}' on empty profile segment"
+            print(msg.format(action))
+            return True
+        
+        return False
 
     def __repr__(self):
         routes = "{0}".format(self._cursor[0])

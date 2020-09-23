@@ -16,4 +16,4 @@ if not __os.path.exists(__bmp_path):
     raise FileNotFoundError("Error: browsermob-proxy not found")
 
 from harquery.api import touch, scan, load, add_preset, update_preset
-from harquery.core import Profile
+from harquery.tree import list_profiles
