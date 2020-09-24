@@ -65,7 +65,7 @@ class Filters:
         self._profile = profile
         self._obj = obj
 
-        for doc in self._obj:
+        for doc in self._obj["filters"]:
             data = execute(self._profile._obj, doc["object"], "filter")
             self._profile._obj = data
 
@@ -81,9 +81,46 @@ class Filters:
             self._profile._obj = execute(
                 self._profile._obj, doc["object"], "filter")
 
-        self._obj = preset
+        self._obj["filters"] += preset
+        if name not in self._obj["presets"]:
+            self._obj["presets"].append(name)
 
-        print("using filters preset: {0}".format(name))
+        self._profile._save()
+
+        print("added ({0}) filters from preset: {1}".format(len(preset), name))
+
+    def discard(self, name: str):
+        preset_path = os.path.join(os.getcwd(), ".hq", "presets", name + ".json")
+        if not os.path.exists(preset_path):
+            raise NameError("preset '{0}' does not exist".format(name))
+        if not name in self._obj["presets"]:
+            raise NameError("preset '{0}' is not currently in use".format(name))
+        
+        with open(preset_path, "r") as f:
+            preset = json.load(f)
+        
+        preset_strings = [p["string"] for p in preset]
+
+        delta = 0
+        for i in range(len(self._obj["filters"]) - 1, -1, -1):
+            doc = self._obj["filters"][i]
+            if doc["string"] in preset_strings:
+                self._obj["filters"].pop(i)
+                delta += 1
+        
+        if delta != 0:
+            self._profile._obj = self._profile._source
+            for doc in self._obj["filters"]:
+                self._profile._obj = execute(
+                    self._profile._obj, doc["object"], "filter")
+        
+        index = self._obj["presets"].index(name)
+        self._obj["presets"].pop(index)
+
+        self._profile._save()
+
+        print("Discarded ({0}) filters matching preset: '{1}'".format(delta, name))        
+
 
     def add(self, query):
         if self._profile._obj is None:
@@ -95,9 +132,9 @@ class Filters:
             self._profile._obj, doc["object"], "filter")
 
         self._profile._obj = data
-        self._obj.append(doc)
+        self._obj["filters"].append(doc)
 
-        self._profile.save()
+        self._profile._save()
         print("added filter: {0}".format(doc["string"]))
 
     def drop(self, index: int):
@@ -106,34 +143,40 @@ class Filters:
             return
 
         if index < 0:
-            index = len(self._obj) + index
-        if index < 0 or index >= len(self._obj):
+            index = len(self._obj["filters"]) + index
+        if index < 0 or index >= len(self._obj["filters"]):
             raise IndexError
             
         self._profile._obj = self._profile._source
 
-        drop_query = self._obj[index]["string"]
-        new_obj = self._obj[:index] + self._obj[index+1:]
+        drop_query = self._obj["filters"][index]["string"]
+        new_obj = self._obj["filters"][:index] + self._obj["filters"][index+1:]
         for doc in new_obj:
             self._profile._obj = execute(
                 self._profile._obj, doc["object"], "filter")
 
-        self._obj = new_obj
-        self._profile.save()
+        self._obj["filters"] = new_obj
+        self._profile._save()
 
         print("removed filter: {0}".format(drop_query))
     
     def clear(self):
         self._profile._obj = self._profile._source
-        self._obj = []
+        self._obj = {"presets": [], "filters": []}
+        self._profile._save()
 
         print("removed all filters")
 
     def __repr__(self):
-        repr_str = ""
+        if len(self._obj["presets"]) == 0:
+            repr_str = ""
+        else:
+            presets_str = ", ".join(self._obj["presets"])
+            repr_str = "Using presets: {0}\n".format(presets_str)
+            
         count = 0
-        for i in range(len(self._obj)):
-            query = self._obj[i]["string"]
+        for i in range(len(self._obj["filters"])):
+            query = self._obj["filters"][i]["string"]
             repr_str += "[{0}] {1}\n".format(i, query)
             count += 1
 
@@ -214,13 +257,11 @@ class Profile:
         total = len(self._obj)
         print("Total entries: {0}".format(total))
 
-    def save(self):
+    def _save(self):
         path = os.path.join(segments_to_path(self._index, self._cursor))
         filters_path = os.path.join(path, "filters.json")
         with open(filters_path, "w") as f:
             json.dump(self.filters._obj, f)
-
-        print("saved profile filters")
 
     @property
     def _index(self):

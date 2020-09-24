@@ -70,23 +70,53 @@ def add_endpoint(entry):
 def load_endpoint(entry):
     pass
 
-def add_preset(name: str, filters: Filters):
+def reduce_filters(filters):
+    reduced = filters._obj["filters"][:]
+    if len(filters._obj["presets"]) != 0:
+        for preset in filters._obj["presets"]:
+            path = os.path.join(os.getcwd(), ".hq", "presets", preset + ".json")
+            if not os.path.isfile(path):
+                raise FileNotFoundError
+            
+            with open(path, "r") as f:
+                obj = json.load(f)
+            
+            preset_strings = [p["string"] for p in obj]
+            for i in range(len(reduced) - 1, -1, -1):
+                filter_string = reduced[i]["string"]
+                if filter_string in preset_strings:
+                    reduced.pop(i)
+    
+    return reduced
+    
+
+def add_preset(name: str, filters: Filters, deep: bool = False):
     preset_path = os.path.join(os.getcwd(), ".hq", "presets", name + ".json")
-    if os.path.exists(preset_path):
+    if os.path.isfile(preset_path):
         raise FileExistsError
+    
+    if not deep:
+        reduced = reduce_filters(filters)
+    else:
+        reduced = filters._obj["filters"][:]
 
     with open(preset_path, "w") as f:
-        json.dump(filters._obj, f)
+        json.dump(reduced, f)
     
-    print("Added new filters preset: {0}".format(name))
+    print("Added new preset: '{0}'".format(name))
 
-def update_preset(name: str, filters: Filters):
+def update_preset(name: str, filters: Filters, deep: bool = False):
     preset_path = os.path.join(os.getcwd(), ".hq", "presets", name + ".json")
     if not os.path.exists(preset_path):
         raise FileNotFoundError
 
+    if not deep:
+        reduced = reduce_filters(filters)
+    else:
+        reduced = filters._obj["filters"][:]
+
     with open(preset_path, "w") as f:
-        json.dump(filters._obj, f)
+        json.dump(reduced, f)
     
-    print("Updated filters preset: {0}".format(name))        
+    print("Updated preset: '{0}'".format(name))        
 
