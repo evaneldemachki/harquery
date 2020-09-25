@@ -382,12 +382,14 @@ class Profile:
         self._load()
         print(str(self))
 
-    def get(self, index, *keys):
+    def get(self, index, query):
         if self._is_empty("GET"): return
 
-        entry = self._obj[index]
-        inner = get_nested(entry, keys)
-        return inner      
+        obj = [self._obj[index]]
+        query = parse(query)["object"]
+        data = execute(obj, query, "focus")[0]
+
+        return data  
     
     def expand(self, index, *keys):
         if self._is_empty("EXPAND"): return

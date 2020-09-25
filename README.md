@@ -101,7 +101,7 @@ Continuing with the above example, let's filter out all non-GET requests using t
 >>> profile.filters.add("request.method = 'GET'")
 ```
 
-```
+```console
 Added filter: request.method='GET'
 ```
 
@@ -110,13 +110,14 @@ Added filter: request.method='GET'
 >>> profile.show()
 ```
 
-```
+```console
 [0] http://github.com/evaneldemachki
 [1] https://github.com/evaneldemachki
 [2] https://github.githubassets.com/assets/github-fb4eca21d084d0f71f1cbbb306bb2a13.css
 [3] https://github.githubassets.com/assets/frameworks-9579f2ec7b17946f9187720cb1846418.css
 ```
-*Note: the entries originally at indices 3 and 5 have been filtered out, and the index has been reset*
+
+*Note: the entries originally at indices 3 and 5 have been filtered out, and the index has been reset.*
 
 ```python
 >>> profile.filters
@@ -126,7 +127,7 @@ Added filter: request.method='GET'
 [0] request.method='GET'
 ```
 
-## Query Syntax
+## Example Queries
 
 ### Equality Operator
 
@@ -137,45 +138,70 @@ Added filter: request.method='GET'
 `response.content.text # 'some string'` / `request.url !# 'githubassets'`
 
 ### @ Operator
-`response.headers @ name = 'content-type' -> value # 'json'` 
 
 This operator is particularly helpful when working with objects such as response headers which resemble the following structure:
 
 ```json
-{
-    headers: [
-        {"name": "Content-Type", "value": "application/json"},
-        {"name": "Location", "value": "https://github.com/evaneldemachki"}
-    ]
-}
+[
+    {
+        "request": {...},
+        "response": {
+            "content": {...},
+            "headers": [
+                {
+                    "name": "Content-Type",
+                    "value":  "application/json"
+                },
+                {
+                    "name": "Accept-Encoding",
+                    "value": "gzip"
+                },
+            ]
+        }
+    },
+    {
+        "request": {...},
+        "response": {
+            "content": {...},
+            "headers": [
+                {
+                    "name": "Content-Type",
+                    "value":  "text/css"
+                },
+                {
+                    "name": "Accept-Encoding",
+                    "value": "*"
+                },
+            ]
+        }
+    }
+]
+
 ```
 
-### Conversion Operators
+We can use the `@` operator to only show entries where a `response["headers"]` array entry containing `"name": "Content-Type"` also contains `"value": "application/json"`:
+
+```console
+response.headers @ name = 'content-type' -> value # 'json'
+```
+
+### Conversion Functions
 
 Objects can be converted into and searched as strings, and string representations of objects can be converted into and searched as objects.
 This can be done in-line and/or chained to a query identifier with dot notation.
-For example, consider the following response object:
-```json
-{
-    response: {
-        "content": {
-            "text": "{'key': {'key2': 'value'}"
-        }
-    }
-}
-```
+For example, consider the following example object:
 
-The value at `key2` can be accessed in a single query and checked against a constant despite it being located in a string using Conversion Operators:
+We can use the `$` conversion operator to:
 
-`~(response.content.text).key.key2 # 'v'`
+1. convert a JSON string at `response["content"]["text"]` to a dictionary object
+2. traverse that object until arriving at the value in `key2`
+3. check if that value is equal to `some_value`:
 
-*Note: The statement above would evaluate to true as 'value' contains 'v'*
+`$[json](response.content.text).key.key2 = 'some_value'`
 
-Alternatively, if we wanted to check the entire response section for the term 'value' without knowing where the term would occur, we could convert the entire response object into a string and search accordingly:
+Alternatively, if we wanted to check the entire response section for the string `some_value` without knowing where the term would occur, we could convert the entire response object into a string and search accordingly:
 
-`$(response) # 'value'`
-
-The statement above would evaluate to true as 'value' is somewhere in the string representation of the response dictionary
+`$[string](response) # 'some_value'`
 
 ## Coming Soon
 

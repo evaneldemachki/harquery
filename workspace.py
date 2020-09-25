@@ -1,4 +1,7 @@
 import os
+from shutil import rmtree
+
+from typing import Tuple, Any
 
 from harquery.core import Profile, Preset
 from harquery.endpoint import Endpoint
@@ -38,8 +41,23 @@ class WorkspacePointer:
             self._extension = ".json"
             self._constructor = Endpoint
 
-    def add(self, *args):
+    def add(self, *args: Tuple[Any]) -> object:
         return self._constructor.new(self._workspace, *args)
+    
+    def drop(self, key: str) -> None:
+        if key not in self:
+            raise KeyError
+        
+        path_string = self._path_string(key)
+        path = os.path.join(
+            self._workspace.path, self._dir_name, path_string)
+        
+        if self._extension is None:
+            rmtree(path)
+        else:
+            os.remove(path)
+        
+        print("Removed {0}: '{1}'".format(self._dir_name[:-1], key))
     
     def _ftcheck(self) -> 'function':
         path = os.path.join(self._workspace.path, self._dir_name)
@@ -53,15 +71,21 @@ class WorkspacePointer:
             return lambda x: x
         else:
             ext_len = len(self._extension)
-            return lambda x: x[:-ext_len]            
+            return lambda x: x[:-ext_len]
+
+    def _path_string(self, key) -> str:
+        if self._extension is None:
+            return key
+        else:
+            return key + self._extension              
 
     def __getitem__(self, key: str) -> object:
         if key in self:
             return self._constructor(self._workspace, key)
         else:
-            raise FileNotFoundError
+            raise KeyError
     
-    def __iter__(self):
+    def __iter__(self) -> str:
         ftcheck = self._ftcheck()
         strf = self._strf()
         

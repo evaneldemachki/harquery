@@ -85,12 +85,27 @@ def parse_directive(directive: str) -> list:
     i = 0
     while i < len(directive):
         char = directive[i]
-        if char in ["$", "~"]:
+        if char == "$":
             if i == len(directive) - 1:
                 raise QueryError("incomplete directive expression")
-            elif directive[i+1] != "(":
-                raise QueryError("un-enclosed conversion")
+            elif directive[i+1] != "[":
+                raise QueryError("expected '[', got '{0}'".format(directive[i+1]))
             
+            func_id = ""
+            for j in range(i+2, len(directive[i+2:])):
+                char2 = directive[j]
+                if char2 == "]":
+                    break
+                elif char2.isalpha():
+                    func_id += char2 
+                else:
+                    raise QueryError("failed to parse conversion function")
+
+            if len(func_id) == 0:
+                raise QueryError("no conversion function specified")
+            
+            i += len(func_id) + 2
+
             level, found = 0, False
             for j in range(i+2, i + 2 + len(directive[i+2:])):
                 if directive[j] == "(":
@@ -99,7 +114,7 @@ def parse_directive(directive: str) -> list:
                     if level == 0:
                         diff = len(directive) - j
                         inner = parse_directive(directive[i+2:][:-diff])
-                        inner.append(char)
+                        inner.append("{0}[{1}]".format(char, func_id))
                         components.append(inner)
                         i = j + 1
                         found = True
@@ -210,20 +225,23 @@ def get_nested(entry: dict, keys: list) -> Any:
             item = get_nested(item, key)
             continue
 
-        if key == "$":
+        if key[0] == "$":
             if i != len(keys) - 1:
                 raise QueryError("invalid directive")
-            
-            if not isinstance(item, str):
-                item = json.dumps(item)
-        elif key == "~":
-            if i != len(keys) - 1:
-                raise QueryError("invalid directive")
-            
-            try:
-                item = json.loads(item)
-            except:
-                raise QueryError("failed to parse string into dictionary")
+
+            func_id = key[2:-1]
+            if func_id == "json":
+                try:
+                    item = json.loads(item)
+                except:
+                    raise QueryError("failed to parse string into dictionary")
+            elif func_id == "string":
+                try:
+                    item = json.dumps(item)
+                except:
+                    raise QueryError("failed to parse object into string")
+            else:
+                raise QueryError("invalid conversion function '{0}'".format(func_id))
         else:
             if key in item:
                 item = item[key]
@@ -333,7 +351,7 @@ def execute(obj: list, query: list, mode: str = "focus") -> list:
 
 def reconstruct_directive(entry: list) -> str:
     directive = ""
-    if entry[-1] in ["$", "~"]:
+    if entry[-1][0] == "$":
         directive += entry[-1] + "("
         for item in entry[:-1]:
             if isinstance(item, list):
