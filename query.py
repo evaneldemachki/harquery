@@ -1,12 +1,7 @@
 from typing import Tuple, Union, Any
-from copy import deepcopy
 import json
 
-class QueryError(Exception):
-    """Exception raised if invalid query string passed"""
-    def __init__(self, message):
-        self.message = "Error: " + message
-        super().__init__(self.message)
+from harquery.errors import QueryError
 
 def reformat(query: str) -> Tuple[str, list]:
     functional_str = ""

@@ -2,11 +2,11 @@
 import os
 import hashlib
 import json
+from typing import Any
 
 def segments_to_path(index, segments):
     index_cursor = index
-    path = os.path.join(
-        os.getcwd(), ".hq", "profiles", segments[0])
+    path = segments[0]
 
     for key in segments[1:]:
         index_cursor = index_cursor[key]
@@ -71,15 +71,3 @@ def profile_tree(base, index, n=0):
             tree_string += profile_tree(base, child, n + 1) + "\n"
     
     return tree_string[:-1]
-
-def list_profiles():
-    profiles_path = os.path.join(os.getcwd(), ".hq", "profiles")
-    count = 0
-    for prof in os.listdir(profiles_path):
-        prof_path = os.path.join(profiles_path, prof)
-        if os.path.isdir(prof_path):
-            count += 1
-            print("| " + prof)
-    
-    if count == 0:
-        print("No profiles have been created")

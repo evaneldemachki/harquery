@@ -148,6 +148,11 @@ class Endpoint:
     @property
     def query(self):
         return self._query
+    
+    @staticmethod
+    def new(workspace, data):
+        print("WARNING: endpoint module is still in development and will not save")
+        return Endpoint(data)
 
     def encode(self):
         url_string = self._url + "?"
