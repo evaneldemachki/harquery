@@ -43,7 +43,7 @@ Download and extract core dependencies into package directory:
 
 ### Usage
 
-`hq.touch` establishes a harquery workspace in your working directory.
+`hq.init` establishes a harquery workspace in your working directory.
 
 In summary, `hq.profiles.add`:
 
@@ -54,7 +54,7 @@ The resultant `hq.Profile` object is generated from the HAR file and all operati
 
 ```python
 >>> import harquery as hq
->>> hq.touch()
+>>> hq.init()
 >>> profile = hq.profiles.add("github.com/evaneldemachki")
 >>> profile
 ```
@@ -155,7 +155,7 @@ This operator is particularly helpful when working with objects such as response
                 {
                     "name": "Accept-Encoding",
                     "value": "gzip"
-                },
+                }
             ]
         }
     },
@@ -171,7 +171,7 @@ This operator is particularly helpful when working with objects such as response
                 {
                     "name": "Accept-Encoding",
                     "value": "*"
-                },
+                }
             ]
         }
     }

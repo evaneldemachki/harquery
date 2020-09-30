@@ -3,43 +3,18 @@ from shutil import rmtree
 
 from typing import Tuple, Any
 
-from harquery.core import Profile, Preset
-from harquery.endpoint import Endpoint
+from harquery.core import Profile
+from harquery.endpoint import Headers, Endpoint
 from harquery.errors import WorkspaceNotFoundError
-
-def touch():
-    bin_path = os.path.join(os.getcwd(), ".hq")
-    if not os.path.exists(bin_path):
-        os.mkdir(bin_path)
-
-    prof_path = os.path.join(bin_path, "profiles")
-    if not os.path.exists(prof_path):
-        os.mkdir(prof_path)
-
-    ep_path = os.path.join(bin_path, "endpoints")
-    if not os.path.exists(ep_path):
-        os.mkdir(ep_path)
-
-    presets_path = os.path.join(bin_path, "presets")
-    if not os.path.exists(presets_path):
-        os.mkdir(presets_path)
-
-    workspace.load()
+from harquery.preset import FiltersPreset, HeadersPreset
 
 class WorkspacePointer:
-    __slots__ = ["_workspace", "_dir_name", "_extension", "_constructor"]
-    def __init__(self, workspace: 'Workspace', dir_name: str):
+    __slots__ = ["_workspace", "_locator", "_extension", "_constructor"]
+    def __init__(self, workspace: 'Workspace', locator: list, extension: str, constructor: object):
         self._workspace = workspace
-        self._dir_name = dir_name
-        if dir_name == "profiles":
-            self._extension = None
-            self._constructor = Profile
-        elif dir_name == "presets":
-            self._extension = ".json"
-            self._constructor = Preset
-        elif dir_name == "endpoints":
-            self._extension = ".json"
-            self._constructor = Endpoint
+        self._locator = locator
+        self._constructor = constructor
+        self._extension = extension
 
     def add(self, *args: Tuple[Any]) -> object:
         return self._constructor.new(self._workspace, *args)
@@ -49,18 +24,18 @@ class WorkspacePointer:
             raise KeyError
         
         path_string = self._path_string(key)
+
         path = os.path.join(
-            self._workspace.path, self._dir_name, path_string)
+            self._workspace.path, *self._locator, path_string)
         
         if self._extension is None:
             rmtree(path)
         else:
             os.remove(path)
         
-        print("Removed {0}: '{1}'".format(self._dir_name[:-1], key))
+        print("Removed {0}: '{1}'".format(self._locator[0][:-1], key))
     
     def _ftcheck(self) -> 'function':
-        path = os.path.join(self._workspace.path, self._dir_name)
         if self._extension is None:
             return os.path.isdir
         else:
@@ -89,7 +64,7 @@ class WorkspacePointer:
         ftcheck = self._ftcheck()
         strf = self._strf()
         
-        path = os.path.join(self._workspace.path, self._dir_name)
+        path = os.path.join(self._workspace._path, *self._locator)
         for item in os.listdir(path):
             if ftcheck(os.path.join(path, item)):
                 yield strf(item)
@@ -104,14 +79,22 @@ class WorkspacePointer:
             count += 1
         
         if count == 0:
-            repr_str = "No {0} have been created in current workspace"
-            repr_str = repr_str.format(self._dir_name)
+            repr_str = "{0} is empty"
+            loc_str = ".".join(self._locator)
+            repr_str = repr_str.format(loc_str)
         else:
             repr_str = repr_str[:-1]
         
         return repr_str
     
     __str__ = __repr__
+
+class PresetIndex:
+    def __init__(self, workspace):
+        self.filters = WorkspacePointer(
+            workspace, ["presets", "filters"], ".json", FiltersPreset)
+        self.headers = WorkspacePointer(
+            workspace, ["presets", "headers"], ".json", HeadersPreset)
 
 class Workspace:
     def __init__(self, path: str = None):
@@ -128,8 +111,34 @@ class Workspace:
 
     def load(self):
         if os.path.isdir(self._path):
-            self.profiles = WorkspacePointer(self, "profiles")
-            self.endpoints = WorkspacePointer(self, "endpoints")
-            self.presets = WorkspacePointer(self, "presets")
+            self.profiles = WorkspacePointer(
+                self, ["profiles"], None, Profile)
+            self.endpoints = WorkspacePointer(
+                self, ["endpoints"], ".json", Endpoint)
+            self.presets = PresetIndex(self)
         else:
             self.profiles = self.endpoints = self.presets = None
+
+    def init(self):
+        bin_path = os.path.join(os.getcwd(), ".hq")
+        if not os.path.isdir(bin_path):
+            os.mkdir(bin_path)
+
+        prof_path = os.path.join(bin_path, "profiles")
+        if not os.path.isdir(prof_path):
+            os.mkdir(prof_path)
+
+        ep_path = os.path.join(bin_path, "endpoints")
+        if not os.path.isdir(ep_path):
+            os.mkdir(ep_path)
+
+        presets_path = os.path.join(bin_path, "presets")
+        if not os.path.isdir(presets_path):
+            os.mkdir(presets_path)
+        
+        for sub in ["filters", "headers"]:
+            sub_path = os.path.join(presets_path, sub)
+            if not os.path.isdir(sub_path):
+                os.mkdir(sub_path)
+
+        self.load()

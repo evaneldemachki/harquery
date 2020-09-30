@@ -22,7 +22,7 @@ def index_profile(segments):
     filters_path = os.path.join(base_path, "filters.json")
     if not os.path.exists(filters_path):
         with open(filters_path, "w") as f:
-            json.dump({"presets": [], "filters": []}, f)
+            json.dump([], f)
     
     index_path = os.path.join(base_path, "index.json")
     if os.path.exists(index_path):
@@ -46,7 +46,7 @@ def index_profile(segments):
 
             filters_path = os.path.join(file_cursor, "filters.json")
             with open(filters_path, "w") as f:
-                json.dump({"presets": [], "filters": []}, f)
+                json.dump([], f)
 
         else:
             index_cursor = index_cursor[seg]
