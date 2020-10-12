@@ -63,14 +63,14 @@ class QueryArray:
 
     def __add__(self, value):
         if value not in self._data:
-            return QueryArray(self._endpoint, self._data + [value])
+            return QueryArray(self._data + [value])
     
     def __sub__(self, value):
         if value in self._data:
             index = self._data.index(value)
 
             new_data = self._data[0:index] + self._data[index+1:]
-            return QueryArray(self._endpoint, new_data)
+            return QueryArray(new_data)
         else:
             return self
     
@@ -90,7 +90,7 @@ class Query:
         self._data = {}
         data = parse_qs(query_str)
         for key in data:
-            self._data[key] = QueryArray(endpoint, data[key])
+            self._data[key] = QueryArray(data[key])
     
     def encode(self):
         return urlencode(self._data, doseq=True)

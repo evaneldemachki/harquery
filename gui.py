@@ -179,8 +179,14 @@ class Ui_MainWindow(object):
             self.filtersList.addItem(item)
         
     def load_entry(self):
-        popup = QtWidgets.QWidget()
-        popup.show()
+        self.popup = QtWidgets.QWidget()
+
+        item = QtWidgets.QTextBrowser(self.popup)
+        item.setGeometry(QtCore.QRect(0, 0, 1000, 1000))
+
+        index = self.centralwidget.sender().currentRow()
+        item.setText(pprint.pformat(self.active.get(index)))
+        self.popup.show()
     
     def load_profile(self):
         self.profileBrowser.clear()
