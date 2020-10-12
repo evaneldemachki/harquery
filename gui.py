@@ -9,6 +9,7 @@ class Ui_MainWindow(object):
         MainWindow.resize(801, 593)
 
         self.active = None
+        self.focus = None
 
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
@@ -29,6 +30,15 @@ class Ui_MainWindow(object):
         self.profilesHeader.setGeometry(QtCore.QRect(10, 0, 181, 31))
         self.profilesHeader.setAlignment(QtCore.Qt.AlignCenter)
         self.profilesHeader.setObjectName("profilesHeader")
+
+        self.focusEdit = QtWidgets.QLineEdit(self.centralwidget)
+        self.focusEdit.setGeometry(QtCore.QRect(440, 0, 300, 31))
+        self.focusEdit.setObjectName("focusEdit")
+
+        self.setFocusButton = QtWidgets.QPushButton(self.centralwidget)
+        self.setFocusButton.setGeometry(QtCore.QRect(750, 0, 41, 31))
+        self.setFocusButton.setObjectName("setFocusButton")
+        self.setFocusButton.clicked.connect(self.set_focus)
 
         self.addProfileButton = QtWidgets.QPushButton(self.centralwidget)
         self.addProfileButton.setGeometry(QtCore.QRect(220, 0, 41, 31))
@@ -59,14 +69,12 @@ class Ui_MainWindow(object):
         self.profileBrowser.setSizePolicy(sizePolicy)
         self.profileBrowser.setMaximumSize(QtCore.QSize(981, 16777215))
         self.profileBrowser.setObjectName("profileBrowser")
+        self.profileBrowser.itemDoubleClicked.connect(self.load_entry)
 
         self.profileTitle = QtWidgets.QLabel(self.centralwidget)
         self.profileTitle.setGeometry(QtCore.QRect(280, 0, 151, 31))
         self.profileTitle.setAlignment(QtCore.Qt.AlignCenter)
         self.profileTitle.setObjectName("profileTitle")
-        self.profileViewLabel = QtWidgets.QLabel(self.centralwidget)
-        self.profileViewLabel.setGeometry(QtCore.QRect(440, 0, 341, 31))
-        self.profileViewLabel.setObjectName("profileViewLabel")
 
         self.lineEdit = QtWidgets.QLineEdit(self.centralwidget)
         self.lineEdit.setGeometry(QtCore.QRect(10, 519, 201, 31))
@@ -111,6 +119,10 @@ class Ui_MainWindow(object):
         for i in range(len(self.profiles)):
             profile = self.profiles[i]
             profile.setText(_translate("MainWindow", profile_names[i]))
+        
+        self.active = profiles[profile_names[0]]
+        self.focus = self.active._focus["string"]
+        self.show_profile()
 
         self.profilesList.setSortingEnabled(__sortingEnabled)
 
@@ -120,47 +132,55 @@ class Ui_MainWindow(object):
         self.filtersHeader.setText(_translate("MainWindow", "FILTERS"))
         self.addFilterButton.setText(_translate("MainWindow", "+"))
 
+        self.setFocusButton.setText(_translate("MainWindow", "+"))
+
         __sortingEnabled = self.filtersList.isSortingEnabled()
 
         self.filtersList.setSortingEnabled(False)
 
         self.filtersList.setSortingEnabled(__sortingEnabled)
-        self.profileTitle.setText(_translate("MainWindow", ""))
-        self.profileViewLabel.setText(_translate("MainWindow", ""))
+        self.profileTitle.setText(_translate("MainWindow", profile_names[0]))
+        self.focusEdit.setText(_translate("MainWindow", ""))
         self.menuProfiles.setTitle(_translate("MainWindow", "Profiles"))
         self.menuEndpoints.setTitle(_translate("MainWindow", "Endpoints"))
     
     def show_profile(self):
         _translate = QtCore.QCoreApplication.translate
-        profile = self.active
 
-        if profile._is_empty("SHOW"):
+        self.profileBrowser.clear()
+
+        if self.active._is_empty("SHOW"):
             self.profileBrowser.setText("<EMPTY>")
             return
 
-        title = ">".join(profile._cursor)
-        
+        title = ">".join(self.active._cursor)
         self.profileTitle.setText(_translate("MainWindow", title))
-        self.profileViewLabel.setText(_translate("MainWindow", profile._focus["string"]))
 
-        data = execute(profile._obj, profile._focus["object"], "focus")
+        self.focusEdit.setText(_translate("MainWindow", self.focus))
+        self.active.focus(self.focus)
+        print(self.focus)
+        data = execute(self.active._obj, self.active._focus["object"], "focus")
         for i in range(len(data)):
             item = QtWidgets.QListWidgetItem()
 
-            if type(data[i]) not in [str, int, float]:
-                item_repr = type(data[i])
+            if len(str(data[i])) < 200:
+                item_repr = str(data[i])
             else:
-                item_repr = data[i]
+                item_repr = "[exceeds max size]"
 
-            item.setText(_translate("MainWindow", item_repr))
-
+            item.setText(_translate("MainWindow", str(item_repr)))
             self.profileBrowser.addItem(item)
         
-        for filt in profile.filters:
+        self.filtersList.clear()
+        for filt in self.active.filters:
             filt_string = filt["string"]
             item = QtWidgets.QListWidgetItem()
             item.setText(_translate("MainWindow", filt_string))
             self.filtersList.addItem(item)
+        
+    def load_entry(self):
+        popup = QtWidgets.QWidget()
+        popup.show()
     
     def load_profile(self):
         self.profileBrowser.clear()
@@ -181,13 +201,27 @@ class Ui_MainWindow(object):
 
         try:
             profile.filters.add(filt)
-            self.profileBrowser.clear()
             self.show_profile()
             profile.save()
-        except:
-            print("idk man fix this shit")
+        except Exception as error:
+            print(str(error))
 
         self.lineEdit.clear()
+    
+    def set_focus(self):
+        if self.active is None:
+            return
+        
+        focus = self.focusEdit.text()
+        profile = self.active
+
+        try:
+            profile.focus(focus)
+            self.focus = focus
+            self.show_profile()
+            profile.save()
+        except Exception as error:
+            print(str(error))
 
 if __name__ == "__main__":
     import sys

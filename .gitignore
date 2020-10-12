@@ -4,3 +4,4 @@ __pycache__/
 geckodriver.exe
 browsermob-proxy-2.1.1/
 venv/
+.hq/
