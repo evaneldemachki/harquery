@@ -1,7 +1,15 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 from harquery import *
 from harquery.query import execute
+from harquery.tree import index_profile
 import pprint
+
+def fill_model(obj, entry):
+    for key, item in entry.items():
+        if key != "{hash}":
+            child = QtGui.QStandardItem(key)
+            obj.appendRow(child)
+            fill_model(child, item)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -14,17 +22,28 @@ class Ui_MainWindow(object):
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
 
-        self.profilesList = QtWidgets.QListWidget(self.centralwidget)
+        # self.profilesList = QtWidgets.QListWidget(self.centralwidget)
+        # self.profilesList.setGeometry(QtCore.QRect(10, 40, 256, 231))
+        # self.profilesList.setObjectName("profilesList")
+        # self.profilesList.itemPressed.connect(self.load_profile)
+
+
+        self.profilesList = QtWidgets.QTreeView(self.centralwidget)
+        self.profilesList.setHeaderHidden(True)
         self.profilesList.setGeometry(QtCore.QRect(10, 40, 256, 231))
         self.profilesList.setObjectName("profilesList")
-        self.profilesList.itemPressed.connect(self.load_profile)
+        self.profilesList.clicked.connect(self.load_profile)
 
-        # ADDING PROFILES:
-        self.profiles = []
-        for profile in profiles:
-            item = QtWidgets.QListWidgetItem()
-            self.profiles.append(item)
-            self.profilesList.addItem(item)
+        model = QtGui.QStandardItemModel()
+
+        data = {}
+        for key in profiles: 
+            data[key] = index_profile(profiles[key]._cursor)
+
+        fill_model(model, data)
+        
+        self.profilesList.setModel(model)
+        self.profilesList.show()
 
         self.profilesHeader = QtWidgets.QLabel(self.centralwidget)
         self.profilesHeader.setGeometry(QtCore.QRect(10, 0, 181, 31))
@@ -113,14 +132,8 @@ class Ui_MainWindow(object):
         __sortingEnabled = self.profilesList.isSortingEnabled()
 
         self.profilesList.setSortingEnabled(False)
-
-        # Add profile text on window load:
-        profile_names = list(profiles)
-        for i in range(len(self.profiles)):
-            profile = self.profiles[i]
-            profile.setText(_translate("MainWindow", profile_names[i]))
         
-        self.active = profiles[profile_names[0]]
+        self.active = profiles[self.profilesList.model().item(0).text()]
         self.focus = self.active._focus["string"]
         self.show_profile()
 
@@ -139,7 +152,7 @@ class Ui_MainWindow(object):
         self.filtersList.setSortingEnabled(False)
 
         self.filtersList.setSortingEnabled(__sortingEnabled)
-        self.profileTitle.setText(_translate("MainWindow", profile_names[0]))
+        #self.profileTitle.setText(_translate("MainWindow", profile_names[0]))
         self.focusEdit.setText(_translate("MainWindow", ""))
         self.menuProfiles.setTitle(_translate("MainWindow", "Profiles"))
         self.menuEndpoints.setTitle(_translate("MainWindow", "Endpoints"))
@@ -150,7 +163,6 @@ class Ui_MainWindow(object):
         self.profileBrowser.clear()
 
         if self.active._is_empty("SHOW"):
-            self.profileBrowser.setText("<EMPTY>")
             return
 
         title = ">".join(self.active._cursor)
@@ -188,14 +200,25 @@ class Ui_MainWindow(object):
         item.setText(pprint.pformat(self.active.get(index)))
         self.popup.show()
     
-    def load_profile(self):
+    def load_profile(self, index):
         self.profileBrowser.clear()
         self.filtersList.clear()
 
-        index = self.centralwidget.sender().currentRow()
-        profile = profiles[self.profiles[index].text()]
-        self.active = profile
+        cursor = []
+        entry = index.model().itemFromIndex(index)
+        cursor.append(entry.text())
 
+        while entry.parent() is not None:
+            entry = entry.parent()
+            cursor.append(entry.text())
+        
+        cursor = list(reversed(cursor))
+
+        profile = profiles[cursor[0]]
+        for c in cursor[1:]:
+            profile.cd(c)
+
+        self.active = profile
         self.show_profile()
 
     def add_filter(self):
