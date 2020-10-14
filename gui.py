@@ -9,167 +9,219 @@ def fill_model(obj, entry):
         if key != "{hash}":
             child = QtGui.QStandardItem(key)
             obj.appendRow(child)
+            print(child)
             fill_model(child, item)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(801, 593)
+        MainWindow.resize(1038, 705)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
+        MainWindow.setSizePolicy(sizePolicy)
+        MainWindow.setStyleSheet("background-color: #36393F;\n"
+"color: rgb(255, 255, 255)")
+        self.centralwidget = QtWidgets.QWidget(MainWindow)
+        self.centralwidget.setObjectName("centralwidget")
 
         self.active = None
         self.focus = None
 
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
+        self.verticalLayoutWidget = QtWidgets.QWidget(self.centralwidget)
+        self.verticalLayoutWidget.setGeometry(QtCore.QRect(0, 0, 361, 661))
+        self.verticalLayoutWidget.setObjectName("verticalLayoutWidget")
+        self.verticalLayout = QtWidgets.QVBoxLayout(self.verticalLayoutWidget)
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayout.setObjectName("verticalLayout")
 
-        # self.profilesList = QtWidgets.QListWidget(self.centralwidget)
-        # self.profilesList.setGeometry(QtCore.QRect(10, 40, 256, 231))
-        # self.profilesList.setObjectName("profilesList")
-        # self.profilesList.itemPressed.connect(self.load_profile)
+        self.profilesLabel = QtWidgets.QLabel(self.verticalLayoutWidget)
+        font = QtGui.QFont()
+        font.setFamily("Bahnschrift SemiLight")
+        font.setPointSize(12)
+        self.profilesLabel.setFont(font)
+        self.profilesLabel.setObjectName("profilesLabel")
+        self.verticalLayout.addWidget(self.profilesLabel)
 
+        self.profilesTree = QtWidgets.QTreeView(self.centralwidget)
+        self.profilesTree.setHeaderHidden(True)
+        self.profilesTree.setObjectName("profilesTree")
+        self.profilesTree.clicked.connect(self.load_profile)
 
-        self.profilesList = QtWidgets.QTreeView(self.centralwidget)
-        self.profilesList.setHeaderHidden(True)
-        self.profilesList.setGeometry(QtCore.QRect(10, 40, 256, 231))
-        self.profilesList.setObjectName("profilesList")
-        self.profilesList.clicked.connect(self.load_profile)
+        self.verticalLayout.addWidget(self.profilesTree)
 
         model = QtGui.QStandardItemModel()
-
         data = {}
         for key in profiles: 
             data[key] = index_profile(profiles[key]._cursor)
 
         fill_model(model, data)
-        
-        self.profilesList.setModel(model)
-        self.profilesList.show()
+        self.profilesTree.setModel(model)
 
-        self.profilesHeader = QtWidgets.QLabel(self.centralwidget)
-        self.profilesHeader.setGeometry(QtCore.QRect(10, 0, 181, 31))
-        self.profilesHeader.setAlignment(QtCore.Qt.AlignCenter)
-        self.profilesHeader.setObjectName("profilesHeader")
+        self.horizontalLayout = QtWidgets.QHBoxLayout()
+        self.horizontalLayout.setObjectName("horizontalLayout")
 
-        self.focusEdit = QtWidgets.QLineEdit(self.centralwidget)
-        self.focusEdit.setGeometry(QtCore.QRect(440, 0, 300, 31))
-        self.focusEdit.setObjectName("focusEdit")
+        self.profilesEdit = QtWidgets.QLineEdit(self.verticalLayoutWidget)
+        font = QtGui.QFont()
+        font.setFamily("Consolas")
+        font.setPointSize(10)
+        self.profilesEdit.setFont(font)
+        self.profilesEdit.setText("")
+        self.profilesEdit.setObjectName("profilesEdit")
+        self.horizontalLayout.addWidget(self.profilesEdit)
 
-        self.setFocusButton = QtWidgets.QPushButton(self.centralwidget)
-        self.setFocusButton.setGeometry(QtCore.QRect(750, 0, 41, 31))
-        self.setFocusButton.setObjectName("setFocusButton")
-        self.setFocusButton.clicked.connect(self.set_focus)
-
-        self.addProfileButton = QtWidgets.QPushButton(self.centralwidget)
-        self.addProfileButton.setGeometry(QtCore.QRect(220, 0, 41, 31))
+        self.addProfileButton = QtWidgets.QPushButton(self.verticalLayoutWidget)
         self.addProfileButton.setObjectName("addProfileButton")
+        self.addProfileButton.clicked.connect(self.add_profile)
+        self.horizontalLayout.addWidget(self.addProfileButton)
 
-        self.filtersHeader = QtWidgets.QLabel(self.centralwidget)
-        self.filtersHeader.setGeometry(QtCore.QRect(50, 280, 181, 31))
-        self.filtersHeader.setAlignment(QtCore.Qt.AlignCenter)
-        self.filtersHeader.setObjectName("filtersHeader")
+        self.verticalLayout.addLayout(self.horizontalLayout)
 
-        self.addFilterButton = QtWidgets.QPushButton(self.centralwidget)
-        self.addFilterButton.setGeometry(QtCore.QRect(220, 520, 41, 31))
+        self.filtersLabel = QtWidgets.QLabel(self.verticalLayoutWidget)
+        font = QtGui.QFont()
+        font.setFamily("Bahnschrift SemiLight")
+        font.setPointSize(12)
+        font.setBold(False)
+        font.setWeight(50)
+        self.filtersLabel.setFont(font)
+        self.filtersLabel.setObjectName("filtersLabel")
+        self.verticalLayout.addWidget(self.filtersLabel)
+
+        self.filtersList = QtWidgets.QListWidget(self.verticalLayoutWidget)
+        self.filtersList.setObjectName("filtersList")
+        self.verticalLayout.addWidget(self.filtersList)
+
+        self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_2.setObjectName("horizontalLayout_2")
+
+        self.filtersEdit = QtWidgets.QLineEdit(self.verticalLayoutWidget)
+        font = QtGui.QFont()
+        font.setFamily("Consolas")
+        font.setPointSize(10)
+        self.filtersEdit.setFont(font)
+        self.filtersEdit.setObjectName("filtersEdit")
+
+        self.horizontalLayout_2.addWidget(self.filtersEdit)
+
+        self.addFilterButton = QtWidgets.QPushButton(self.verticalLayoutWidget)
         self.addFilterButton.setObjectName("addFilterButton")
         self.addFilterButton.clicked.connect(self.add_filter)
 
-        self.filtersList = QtWidgets.QListWidget(self.centralwidget)
-        self.filtersList.setGeometry(QtCore.QRect(10, 320, 251, 191))
-        self.filtersList.setObjectName("filtersList")
+        self.horizontalLayout_2.addWidget(self.addFilterButton)
 
-        self.profileBrowser = QtWidgets.QListWidget(self.centralwidget)
-        self.profileBrowser.setGeometry(QtCore.QRect(280, 40, 501, 511))
+        self.verticalLayout.addLayout(self.horizontalLayout_2)
 
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.profileBrowser.sizePolicy().hasHeightForWidth())
+        self.profilesBrowser = QtWidgets.QListWidget(self.centralwidget)
+        self.profilesBrowser.setGeometry(QtCore.QRect(370, 30, 661, 631))
+        self.profilesBrowser.setObjectName("profilesList")
+        self.profilesBrowser.itemDoubleClicked.connect(self.load_entry)
 
-        self.profileBrowser.setSizePolicy(sizePolicy)
-        self.profileBrowser.setMaximumSize(QtCore.QSize(981, 16777215))
-        self.profileBrowser.setObjectName("profileBrowser")
-        self.profileBrowser.itemDoubleClicked.connect(self.load_entry)
+        self.horizontalLayoutWidget_3 = QtWidgets.QWidget(self.centralwidget)
+        self.horizontalLayoutWidget_3.setGeometry(QtCore.QRect(370, 0, 661, 27))
+        self.horizontalLayoutWidget_3.setObjectName("horizontalLayoutWidget_3")
 
-        self.profileTitle = QtWidgets.QLabel(self.centralwidget)
-        self.profileTitle.setGeometry(QtCore.QRect(280, 0, 151, 31))
-        self.profileTitle.setAlignment(QtCore.Qt.AlignCenter)
-        self.profileTitle.setObjectName("profileTitle")
+        self.horizontalLayout_3 = QtWidgets.QHBoxLayout(self.horizontalLayoutWidget_3)
+        self.horizontalLayout_3.setContentsMargins(0, 0, 0, 0)
+        self.horizontalLayout_3.setObjectName("horizontalLayout_3")
 
-        self.lineEdit = QtWidgets.QLineEdit(self.centralwidget)
-        self.lineEdit.setGeometry(QtCore.QRect(10, 519, 201, 31))
-        self.lineEdit.setObjectName("lineEdit")
+        self.browserLabel = QtWidgets.QLabel(self.horizontalLayoutWidget_3)
+        self.browserLabel.setMinimumSize(QtCore.QSize(150, 0))
+        font = QtGui.QFont()
+        font.setFamily("Bahnschrift SemiBold")
+        font.setPointSize(12)
+        font.setBold(True)
+        font.setWeight(75)
+        self.browserLabel.setFont(font)
+        self.browserLabel.setObjectName("browserLabel")
+        self.horizontalLayout_3.addWidget(self.browserLabel)
+
+        self.focusEdit = QtWidgets.QLineEdit(self.horizontalLayoutWidget_3)
+        font = QtGui.QFont()
+        font.setFamily("Consolas")
+        font.setPointSize(10)
+        self.focusEdit.setFont(font)
+        self.focusEdit.setText("")
+        self.focusEdit.setObjectName("focusEdit")
+        self.horizontalLayout_3.addWidget(self.focusEdit)
+
+        self.setFocusButton = QtWidgets.QPushButton(self.horizontalLayoutWidget_3)
+        self.setFocusButton.setObjectName("setFocusButton")
+        self.setFocusButton.clicked.connect(self.set_focus)
+
+        self.horizontalLayout_3.addWidget(self.setFocusButton)
 
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 801, 21))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 1038, 21))
         self.menubar.setObjectName("menubar")
-
-        self.menuProfiles = QtWidgets.QMenu(self.menubar)
-        self.menuProfiles.setObjectName("menuProfiles")
-
-        self.menuEndpoints = QtWidgets.QMenu(self.menubar)
-        self.menuEndpoints.setObjectName("menuEndpoints")
+        self.menuPresets = QtWidgets.QMenu(self.menubar)
+        self.menuPresets.setObjectName("menuPresets")
 
         MainWindow.setMenuBar(self.menubar)
 
         self.statusbar = QtWidgets.QStatusBar(MainWindow)
         self.statusbar.setObjectName("statusbar")
-
         MainWindow.setStatusBar(self.statusbar)
 
-        self.menubar.addAction(self.menuProfiles.menuAction())
-        self.menubar.addAction(self.menuEndpoints.menuAction())
+        self.actionFilters = QtWidgets.QAction(MainWindow)
+        self.actionFilters.setObjectName("actionFilters")
+
+        self.actionHeaders = QtWidgets.QAction(MainWindow)
+        self.actionHeaders.setObjectName("actionHeaders")
+
+        self.menuPresets.addAction(self.actionFilters)
+        self.menuPresets.addAction(self.actionHeaders)
+        self.menubar.addAction(self.menuPresets.menuAction())
 
         self.retranslateUi(MainWindow)
-
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Harquery GUI"))
 
-        __sortingEnabled = self.profilesList.isSortingEnabled()
+        __sortingEnabled = self.profilesBrowser.isSortingEnabled()
 
-        self.profilesList.setSortingEnabled(False)
-        
-        self.active = profiles[self.profilesList.model().item(0).text()]
+        self.profilesLabel.setText(_translate("MainWindow", "Profiles"))
+        self.addProfileButton.setText(_translate("MainWindow", "Add Profile"))
+        self.filtersLabel.setText(_translate("MainWindow", "Filters"))
+        self.addFilterButton.setText(_translate("MainWindow", "Add Filter"))
+        self.browserLabel.setText(_translate("MainWindow", ""))
+        self.setFocusButton.setText(_translate("MainWindow", "Set Focus"))
+        self.menuPresets.setTitle(_translate("MainWindow", "Presets"))
+        self.actionFilters.setText(_translate("MainWindow", "Filters"))
+        self.actionHeaders.setText(_translate("MainWindow", "Headers"))
+
+        self.active = profiles[self.profilesTree.model().item(0).text()]
         self.focus = self.active._focus["string"]
         self.show_profile()
-
-        self.profilesList.setSortingEnabled(__sortingEnabled)
-
-        self.profilesHeader.setText(_translate("MainWindow", "PROFILES"))
-        self.addProfileButton.setText(_translate("MainWindow", "+"))
-
-        self.filtersHeader.setText(_translate("MainWindow", "FILTERS"))
-        self.addFilterButton.setText(_translate("MainWindow", "+"))
-
-        self.setFocusButton.setText(_translate("MainWindow", "+"))
-
-        __sortingEnabled = self.filtersList.isSortingEnabled()
-
-        self.filtersList.setSortingEnabled(False)
-
-        self.filtersList.setSortingEnabled(__sortingEnabled)
-        #self.profileTitle.setText(_translate("MainWindow", profile_names[0]))
-        self.focusEdit.setText(_translate("MainWindow", ""))
-        self.menuProfiles.setTitle(_translate("MainWindow", "Profiles"))
-        self.menuEndpoints.setTitle(_translate("MainWindow", "Endpoints"))
     
+    def add_profile(self):
+        prof = self.profilesEdit.text()
+        if prof == "":
+            return
+
+        profile = profiles.add(prof)
+        self.profilesEdit.clear()
+        index = {prof: index_profile(profile._cursor)}
+        fill_model(self.profilesTree.model(), index)
+
     def show_profile(self):
         _translate = QtCore.QCoreApplication.translate
 
-        self.profileBrowser.clear()
+        self.profilesBrowser.clear()
 
         if self.active._is_empty("SHOW"):
             return
 
         title = ">".join(self.active._cursor)
-        self.profileTitle.setText(_translate("MainWindow", title))
+        self.browserLabel.setText(_translate("MainWindow", title))
 
         self.focusEdit.setText(_translate("MainWindow", self.focus))
         self.active.focus(self.focus)
+
         print(self.focus)
         data = execute(self.active._obj, self.active._focus["object"], "focus")
         for i in range(len(data)):
@@ -181,7 +233,7 @@ class Ui_MainWindow(object):
                 item_repr = "[exceeds max size]"
 
             item.setText(_translate("MainWindow", str(item_repr)))
-            self.profileBrowser.addItem(item)
+            self.profilesBrowser.addItem(item)
         
         self.filtersList.clear()
         for filt in self.active.filters:
@@ -201,7 +253,7 @@ class Ui_MainWindow(object):
         self.popup.show()
     
     def load_profile(self, index):
-        self.profileBrowser.clear()
+        self.profilesBrowser.clear()
         self.filtersList.clear()
 
         cursor = []
@@ -225,7 +277,7 @@ class Ui_MainWindow(object):
         if self.active is None:
             return
 
-        filt = self.lineEdit.text()
+        filt = self.filtersEdit.text()
         profile = self.active
 
         try:
@@ -235,7 +287,7 @@ class Ui_MainWindow(object):
         except Exception as error:
             print(str(error))
 
-        self.lineEdit.clear()
+        self.filtersEdit.clear()
     
     def set_focus(self):
         if self.active is None:
