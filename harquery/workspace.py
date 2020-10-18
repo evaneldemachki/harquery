@@ -68,8 +68,19 @@ class WorkspacePointer:
         for item in os.listdir(path):
             if ftcheck(os.path.join(path, item)):
                 yield strf(item)
-
     
+    def __len__(self) -> int:
+        ftcheck = self._ftcheck()
+        strf = self._strf()
+        
+        path = os.path.join(self._workspace._path, *self._locator)
+        count = 0
+        for item in os.listdir(path):
+            if ftcheck(os.path.join(path, item)):
+                count += 1
+        
+        return count
+
     def __repr__(self) -> str:
         repr_str = ""
 

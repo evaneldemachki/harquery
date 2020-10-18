@@ -1,16 +1,10 @@
+import sys
+from collections import OrderedDict
 from PyQt5 import QtCore, QtGui, QtWidgets
 from harquery import *
 from harquery.query import execute
 from harquery.tree import index_profile
 import pprint
-
-def fill_model(obj, entry):
-    for key, item in entry.items():
-        if key != "{hash}":
-            child = QtGui.QStandardItem(key)
-            obj.appendRow(child)
-            print(child)
-            fill_model(child, item)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -44,20 +38,18 @@ class Ui_MainWindow(object):
         self.profilesLabel.setObjectName("profilesLabel")
         self.verticalLayout.addWidget(self.profilesLabel)
 
-        self.profilesTree = QtWidgets.QTreeView(self.centralwidget)
+        self.profilesTree = QtWidgets.QTreeWidget(self.centralwidget)
         self.profilesTree.setHeaderHidden(True)
         self.profilesTree.setObjectName("profilesTree")
-        self.profilesTree.clicked.connect(self.load_profile)
 
         self.verticalLayout.addWidget(self.profilesTree)
 
-        model = QtGui.QStandardItemModel()
         data = {}
         for key in profiles: 
             data[key] = index_profile(profiles[key]._cursor)
-
-        fill_model(model, data)
-        self.profilesTree.setModel(model)
+        
+        self.cache = OrderedDict()
+        self.fill_model(self.profilesTree, data)
 
         self.horizontalLayout = QtWidgets.QHBoxLayout()
         self.horizontalLayout.setObjectName("horizontalLayout")
@@ -88,9 +80,10 @@ class Ui_MainWindow(object):
         self.filtersLabel.setObjectName("filtersLabel")
         self.verticalLayout.addWidget(self.filtersLabel)
 
-        self.filtersList = QtWidgets.QListWidget(self.verticalLayoutWidget)
-        self.filtersList.setObjectName("filtersList")
-        self.verticalLayout.addWidget(self.filtersList)
+        self.filtersTree = QtWidgets.QTreeWidget(self.verticalLayoutWidget)
+        self.filtersTree.setObjectName("filtersTree")
+        self.filtersTree.setHeaderHidden(True)
+        self.verticalLayout.addWidget(self.filtersTree)
 
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
@@ -126,7 +119,8 @@ class Ui_MainWindow(object):
         self.horizontalLayout_3.setObjectName("horizontalLayout_3")
 
         self.browserLabel = QtWidgets.QLabel(self.horizontalLayoutWidget_3)
-        self.browserLabel.setMinimumSize(QtCore.QSize(150, 0))
+        self.browserLabel.setMinimumSize(QtCore.QSize(300, 27))
+        self.browserLabel.setMaximumSize(QtCore.QSize(300, 27))
         font = QtGui.QFont()
         font.setFamily("Bahnschrift SemiBold")
         font.setPointSize(12)
@@ -184,6 +178,16 @@ class Ui_MainWindow(object):
 
         __sortingEnabled = self.profilesBrowser.isSortingEnabled()
 
+        self.profilesTree.headerItem().setText(0, _translate("MainWindow", "name"))
+        self.profilesTree.headerItem().setText(1, _translate("MainWindow", "remove"))
+        self.filtersTree.headerItem().setText(0, _translate("MainWindow", "name"))
+        self.filtersTree.headerItem().setText(1, _translate("MainWindow", "remove"))
+
+        self.profilesTree.header().resizeSection(1, 30)
+        self.profilesTree.header().resizeSection(0, 300)
+        self.filtersTree.header().resizeSection(1, 30)
+        self.filtersTree.header().resizeSection(0, 300)
+
         self.profilesLabel.setText(_translate("MainWindow", "Profiles"))
         self.addProfileButton.setText(_translate("MainWindow", "Add Profile"))
         self.filtersLabel.setText(_translate("MainWindow", "Filters"))
@@ -194,35 +198,114 @@ class Ui_MainWindow(object):
         self.actionFilters.setText(_translate("MainWindow", "Filters"))
         self.actionHeaders.setText(_translate("MainWindow", "Headers"))
 
-        self.active = profiles[self.profilesTree.model().item(0).text()]
-        self.focus = self.active._focus["string"]
-        self.show_profile()
+        if len(profiles) != 0:
+            self.active = profiles[self.profilesTree.topLevelItem(0).text(0)]
+            self.focus = self.active._focus["string"]
+            self.show_profile()
+        else:
+            self.focus = "request.url"
     
+    def drop_profile(self, name):
+        index = list(self.cache.keys()).index(name)
+        self.profilesTree.takeTopLevelItem(index)
+        del self.cache[name]
+        profiles.drop(name)
+    
+    def drop_filters(self, index):
+        self.active.filters.drop(index)
+        self.active.save()
+
+        self.show_profile()
+
+    def fill_model(self, obj, entry, cursor=[]):
+        cache = self.cache
+        for key in cursor:
+            cache = cache[key]
+
+        for key, item in entry.items():
+            if key != "{hash}":
+                child = QtWidgets.QTreeWidgetItem(obj)
+                child.setText(0, key)
+
+                if len(cursor) == 0:
+                    button = QtWidgets.QPushButton("Drop")
+                    button.setObjectName("drop_" + key)
+                    button.clicked.connect(lambda x, y=key: self.drop_profile(y))
+                    self.profilesTree.setItemWidget(child, 1, button)
+
+                label = QtWidgets.QLabel(key)
+                label.setObjectName("label_" + key)
+
+                # NOTE: this is horrible practice but the correct way is overkill
+                label.mousePressEvent = lambda x, y=cursor+[key]: self.load_profile(y)
+                
+                self.profilesTree.setItemWidget(child, 0, label)
+                
+                cache[key] = {"object": child}
+
+                self.fill_model(child, item, cursor + [key])
+
     def add_profile(self):
         prof = self.profilesEdit.text()
         if prof == "":
             return
 
         profile = profiles.add(prof)
+
         self.profilesEdit.clear()
-        index = {prof: index_profile(profile._cursor)}
-        fill_model(self.profilesTree.model(), index)
+
+        cursor = profile._cursor
+
+        cache = self.cache
+        ext_cache = {}
+        ext_ref = ext_cache
+        obj = self.profilesTree
+        split = 0
+        for key in cursor:
+            if key in cache:
+                cache = cache[key]
+                obj = cache["object"]
+                split += 1
+            else:
+                ext_ref[key] = {}
+                ext_ref = ext_ref[key]
+        
+        loc = cursor[:split]
+        if len(ext_cache) != 0:
+            self.fill_model(obj, ext_cache, loc)
+        
+        self.active = profile
+        self.show_profile()
+    
+    def show_filters(self):
+        self.filtersTree.clear()
+        i = 0
+        for filt in self.active.filters:
+            filt_string = filt["string"]
+            item = QtWidgets.QTreeWidgetItem(self.filtersTree)
+            label = QtWidgets.QLabel(filt_string)
+            button = QtWidgets.QPushButton("Drop")
+            button.setObjectName("drop_" + str(i))
+            button.clicked.connect(lambda x, y=i: self.drop_filters(y))
+            self.filtersTree.setItemWidget(item, 0, label)
+            self.filtersTree.setItemWidget(item, 1, button)
+            
+            i += 1
 
     def show_profile(self):
         _translate = QtCore.QCoreApplication.translate
 
         self.profilesBrowser.clear()
+        
+        title = " > ".join(self.active._cursor)
+        self.browserLabel.setText(_translate("MainWindow", title))
 
         if self.active._is_empty("SHOW"):
             return
 
-        title = ">".join(self.active._cursor)
-        self.browserLabel.setText(_translate("MainWindow", title))
-
         self.focusEdit.setText(_translate("MainWindow", self.focus))
         self.active.focus(self.focus)
 
-        print(self.focus)
         data = execute(self.active._obj, self.active._focus["object"], "focus")
         for i in range(len(data)):
             item = QtWidgets.QListWidgetItem()
@@ -235,12 +318,7 @@ class Ui_MainWindow(object):
             item.setText(_translate("MainWindow", str(item_repr)))
             self.profilesBrowser.addItem(item)
         
-        self.filtersList.clear()
-        for filt in self.active.filters:
-            filt_string = filt["string"]
-            item = QtWidgets.QListWidgetItem()
-            item.setText(_translate("MainWindow", filt_string))
-            self.filtersList.addItem(item)
+        self.show_filters()
         
     def load_entry(self):
         self.popup = QtWidgets.QWidget()
@@ -252,20 +330,10 @@ class Ui_MainWindow(object):
         item.setText(pprint.pformat(self.active.get(index)))
         self.popup.show()
     
-    def load_profile(self, index):
+    def load_profile(self, cursor):
         self.profilesBrowser.clear()
-        self.filtersList.clear()
-
-        cursor = []
-        entry = index.model().itemFromIndex(index)
-        cursor.append(entry.text())
-
-        while entry.parent() is not None:
-            entry = entry.parent()
-            cursor.append(entry.text())
+        self.filtersTree.clear()
         
-        cursor = list(reversed(cursor))
-
         profile = profiles[cursor[0]]
         for c in cursor[1:]:
             profile.cd(c)
@@ -305,7 +373,12 @@ class Ui_MainWindow(object):
             print(str(error))
 
 if __name__ == "__main__":
-    import sys
+    if profiles is None:
+        init()
+        profiles = workspace.profiles
+        presets = workspace.presets
+        endpoints = workspace.endpoints
+
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
