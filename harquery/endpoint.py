@@ -92,6 +92,12 @@ class Query:
         for key in data:
             self._data[key] = QueryArray(data[key])
     
+    def drop(self, key):
+        if key in self._data:
+            del self._data[key]
+        else:
+            raise KeyError
+    
     def encode(self):
         return urlencode(self._data, doseq=True)
     
@@ -227,7 +233,7 @@ class Endpoint:
 
         return obj
     
-    def send(self) -> None:
+    def send(self) -> Any:
         obj = self.to_dict()
         headers = {}
         for entry in obj["headers"]:
